@@ -1,0 +1,14 @@
+schema_version: 1
+scene_sha256: e8603832f67be83067f69b445e8ee39701558eefed351cc36deec35a45ce0dbe
+motion_enabled: false
+reason: physical robots deliberately disabled
+simulation_motion_enabled: true
+validated_plans:
+  R1: robot_control/plans/r1_cycle_plan.json
+  R2: robot_control/plans/r2_cycle_plan.json
+  R3: robot_control/plans/r3_cycle_plan.json
+  R4: robot_control/plans/r4_cycle_plan.json
+  R5: robot_control/plans/r5_cycle_plan.json
+  R6: robot_control/plans/r6_cycle_plan.json
+  R7: robot_control/plans/r7_cycle_plan.json
+  R8: robot_control/plans/r8_cycle_plan.json

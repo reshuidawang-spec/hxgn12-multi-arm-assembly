@@ -1,0 +1,113 @@
+# Robot configuration for the rebuilt 8-CR5A cell.
+#
+# New numbering after the line rebuild:
+#   R1-R3  left workspace (former display copy R6-R8)
+#   R4-R6  former R1-R3 (middle workspace)
+#   R7-R8  former R4-R5 (screw / sort)
+#
+# Product: real control-cabinet assembly (STL models, 50% scale).
+
+robots:
+  R1:
+    name: "Cabinet shell feed robot (conveyor -> workbench 1)"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [-3.55, 0.65, 0.19]
+    base_object: R1_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R1_HOME_REF
+    capabilities: [shell_feed, pick_and_place]
+    end_effector: gripper
+    work_area: [cabinet_conveyor_area, workbench1_area]
+    tip: R1_gripper_tip
+
+  R2:
+    name: "Top plate installation robot"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [-3.51, -0.22, 0.19]
+    base_object: R2_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R2_HOME_REF
+    capabilities: [plate_install, pick_and_place]
+    end_effector: vacuum
+    work_area: [r2_stand_area, workbench1_area]
+    tip: R2_vacuum_tip
+
+  R3:
+    name: "Frame rail installation and handoff transfer robot"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [-2.55, 0.40, 0.19]
+    base_object: R3_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R3_HOME_REF
+    capabilities: [rail_install, transfer_to_handoff, pick_and_place]
+    end_effector: gripper
+    work_area: [r3_rack_area, workbench1_area, handoff_area]
+    tip: R3_gripper_tip
+
+  R4:
+    name: "Handoff -> workbench 2 transfer robot"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [-1.60, 0.65, 0.19]
+    base_object: R4_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R4_HOME_REF
+    capabilities: [handoff_transfer, pick_and_place]
+    end_effector: gripper
+    work_area: [handoff_area, workbench2_area]
+    tip: R4_gripper_tip
+
+  R5:
+    name: "Large device installation robot (PLC, power supply)"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [-1.56, -0.22, 0.19]
+    base_object: R5_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R5_HOME_REF
+    capabilities: [device_install, pick_and_place]
+    end_effector: vacuum
+    work_area: [r5_basket_area, workbench2_area]
+    tip: R5_vacuum_tip
+
+  R6:
+    name: "Small device installation and staging transfer robot"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [-0.60, 0.40, 0.19]
+    base_object: R6_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R6_HOME_REF
+    capabilities: [device_install, transfer_to_staging, pick_and_place]
+    end_effector: gripper
+    work_area: [r6_basket_area, workbench2_area, staging_area]
+    tip: R6_gripper_tip
+
+  R7:
+    name: "Top plate screw fastening robot (staging)"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [0.65, 0.25, 0.19]
+    base_object: R7_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R7_HOME_REF
+    capabilities: [screw]
+    end_effector: screwdriver
+    work_area: [staging_area]
+    tip: R7_tool_tip
+
+  R8:
+    name: "Finished product sorting robot (staging -> output conveyor)"
+    model: DOBOT CR5A
+    model_file: cr5_robot_fixed.urdf
+    position: [0.35, -0.50, 0.19]
+    base_object: R8_Base
+    home_pose: [0, 0, 0, 0, 0, 0]
+    home_point: R8_HOME_REF
+    capabilities: [sort, pick_and_place]
+    end_effector: gripper
+    work_area: [staging_area, finished_conveyor_area]
+    tip: R8_gripper_tip

@@ -1,0 +1,22 @@
+counts:
+  arm_joints_per_robot: 6
+  active_robots: 8
+  cell_objects: 340
+  display_only_robots: 0
+  process_targets: 72
+  robots: 8
+  target_tree_dummies: 81
+embedded_scripts: []
+notes:
+- 'Scene produced by scripts/rename_scene_robots.py, scripts/build_new_line_scene.py
+  and scripts/build_cabinet_product_scene.py: real control-cabinet STL product at
+  50% scale, displayed as an OPEN-TOP box. Styled floor with station zones, robot
+  base pads and an amber flow path (conveyor -> WB1 -> handoff -> WB2 -> staging ->
+  finished belt -> finished bin); longer conveyors; Finished_Bin at the east belt
+  end; all eight robots verified at the scene root.'
+scene:
+  file: compact_cell.ttt
+  root: /FiveCR5A_Cell
+  sha256: 1edc383e7274bb9bfe56928617d6e20e01a45b1bdd0c10be7fc2ff476c885b7b
+  size: 8132526
+schema_version: 1

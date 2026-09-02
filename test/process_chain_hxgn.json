@@ -1,0 +1,704 @@
+{
+  "schema_version": 2,
+  "source_folder": "test/models",
+  "file_count": 62,
+  "part_count": 26,
+  "contact_graph": {
+    "tolerance_m": 0.006,
+    "edges": [
+      [
+        "HXGN-12,(850X1000X2000) - JN15-12接地开关",
+        "HXGN-12,(850X1000X2000) - 正装梁830,JN15安装梁下",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - VS1安装板",
+        "HXGN-12,(850X1000X2000) - VS1安装梁",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - VS1安装板",
+        "HXGN-12,(850X1000X2000) - ZN63(VS1-630A~1600)",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - VS1安装板",
+        "HXGN-12,(850X1000X2000) - 大梁2000",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - VS1安装梁",
+        "HXGN-12,(850X1000X2000) - 大梁2000",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 三角支板",
+        "HXGN-12,(850X1000X2000) - 轴",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 上下支板",
+        "HXGN-12,(850X1000X2000) - 左右支架",
+        6e-05
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 上下支板",
+        "HXGN-12,(850X1000X2000) - 正装梁830,GN19安装梁",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 分支绝缘子",
+        "HXGN-12,(850X1000X2000) - 右夹板",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 分支绝缘子",
+        "HXGN-12,(850X1000X2000) - 小支架",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 分支绝缘子",
+        "HXGN-12,(850X1000X2000) - 轴",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 双门支架",
+        "HXGN-12,(850X1000X2000) - 门板挡梁740",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 后封板840X1900",
+        "HXGN-12,(850X1000X2000) - 大横梁740",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 大梁1000",
+        "HXGN-12,(850X1000X2000) - 大梁2000",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 大梁1000",
+        "HXGN-12,(850X1000X2000) - 大横梁740",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 大梁2000",
+        "HXGN-12,(850X1000X2000) - 联接件",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 大梁2000",
+        "HXGN-12,(850X1000X2000) - 门板挡梁740",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 小支架",
+        "HXGN-12,(850X1000X2000) - 轴",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 左右支架",
+        "HXGN-12,(850X1000X2000) - 正装梁830,GN19安装梁",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 左右支架",
+        "HXGN-12,(850X1000X2000) - 轴",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 正装梁830-上LZZBJ9-10",
+        "HXGN-12,(850X1000X2000) - 电流互LZZBJ9-10",
+        0.0
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 联接件",
+        "HXGN-12,(850X1000X2000) - 门板挡梁740",
+        0.0
+      ]
+    ]
+  },
+  "constraints": {
+    "supports": [
+      [
+        "HXGN-12,(850X1000X2000) - VS1安装板",
+        "HXGN-12,(850X1000X2000) - 大梁2000"
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - VS1安装梁",
+        "HXGN-12,(850X1000X2000) - 大梁2000"
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 后封板840X1900",
+        "HXGN-12,(850X1000X2000) - 大横梁740"
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 正装梁830,GN19安装梁",
+        "HXGN-12,(850X1000X2000) - 上下支板"
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 正装梁830,GN19安装梁",
+        "HXGN-12,(850X1000X2000) - 左右支架"
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 正装梁830,JN15安装梁下",
+        "HXGN-12,(850X1000X2000) - JN15-12接地开关"
+      ],
+      [
+        "HXGN-12,(850X1000X2000) - 正装梁830-上LZZBJ9-10",
+        "HXGN-12,(850X1000X2000) - 电流互LZZBJ9-10"
+      ]
+    ],
+    "contains": []
+  },
+  "assembly_order": [
+    "HXGN-12,(850X1000X2000) - 正装梁830,GN19安装梁",
+    "HXGN-12,(850X1000X2000) - 正装梁830,JN15安装梁下",
+    "HXGN-12,(850X1000X2000) - 正装梁830-上LZZBJ9-10",
+    "HXGN-12,(850X1000X2000) - 大梁1000",
+    "HXGN-12,(850X1000X2000) - VS1安装梁",
+    "HXGN-12,(850X1000X2000) - 门板挡梁740",
+    "HXGN-12,(850X1000X2000) - 后封板840X1900",
+    "HXGN-12,(850X1000X2000) - 大横梁740",
+    "HXGN-12,(850X1000X2000) - 侧封板900X1900",
+    "HXGN-12,(850X1000X2000) - 顶封板840X990",
+    "HXGN-12,(850X1000X2000) - VS1安装板",
+    "HXGN-12,(850X1000X2000) - 大梁2000",
+    "HXGN-12,(850X1000X2000) - 小支架",
+    "HXGN-12,(850X1000X2000) - 上下支板",
+    "HXGN-12,(850X1000X2000) - 左右支架",
+    "HXGN-12,(850X1000X2000) - 轴",
+    "HXGN-12,(850X1000X2000) - 三角支板",
+    "HXGN-12,(850X1000X2000) - 右夹板",
+    "HXGN-12,(850X1000X2000) - 联接件",
+    "HXGN-12,(850X1000X2000) - 单门支架",
+    "HXGN-12,(850X1000X2000) - 双门支架",
+    "HXGN-12,(850X1000X2000) - 电流互LZZBJ9-10",
+    "HXGN-12,(850X1000X2000) - 分支绝缘子",
+    "HXGN-12,(850X1000X2000) - JN15-12接地开关",
+    "HXGN-12,(850X1000X2000) - 上下大绝缘子",
+    "HXGN-12,(850X1000X2000) - ZN63(VS1-630A~1600)"
+  ],
+  "process_chain": [
+    {
+      "index": 1,
+      "part": "HXGN-12,(850X1000X2000) - 正装梁830,GN19安装梁",
+      "instances": 3,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        437.0856,
+        1399.7947,
+        84.595
+      ],
+      "extents_m": [
+        830.0,
+        60.0,
+        20.0
+      ],
+      "triangles": 1240
+    },
+    {
+      "index": 2,
+      "part": "HXGN-12,(850X1000X2000) - 正装梁830,JN15安装梁下",
+      "instances": 1,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        437.0856,
+        309.7195,
+        84.595
+      ],
+      "extents_m": [
+        830.0,
+        80.0,
+        20.0
+      ],
+      "triangles": 2296
+    },
+    {
+      "index": 3,
+      "part": "HXGN-12,(850X1000X2000) - 正装梁830-上LZZBJ9-10",
+      "instances": 2,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        437.0856,
+        1049.0095,
+        84.595
+      ],
+      "extents_m": [
+        830.0,
+        60.0,
+        20.0
+      ],
+      "triangles": 1956
+    },
+    {
+      "index": 4,
+      "part": "HXGN-12,(850X1000X2000) - 大梁1000",
+      "instances": 4,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        847.0856,
+        52.7654,
+        511.595
+      ],
+      "extents_m": [
+        30.0,
+        85.0,
+        996.0
+      ],
+      "triangles": 21562
+    },
+    {
+      "index": 5,
+      "part": "HXGN-12,(850X1000X2000) - VS1安装梁",
+      "instances": 2,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        844.5856,
+        721.0265,
+        512.595
+      ],
+      "extents_m": [
+        25.0,
+        60.0,
+        828.0
+      ],
+      "triangles": 1958
+    },
+    {
+      "index": 6,
+      "part": "HXGN-12,(850X1000X2000) - 门板挡梁740",
+      "instances": 1,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        437.0856,
+        1420.2654,
+        999.095
+      ],
+      "extents_m": [
+        790.0001,
+        60.0,
+        25.0
+      ],
+      "triangles": 1294
+    },
+    {
+      "index": 7,
+      "part": "HXGN-12,(850X1000X2000) - 后封板840X1900",
+      "instances": 1,
+      "process": "panel_install",
+      "role": "flat_panel",
+      "suggested_robot": "R2",
+      "suggested_station": "stand",
+      "center_m": [
+        437.0856,
+        1010.2654,
+        10.595
+      ],
+      "extents_m": [
+        840.0,
+        1899.9999,
+        2.0
+      ],
+      "triangles": 1960
+    },
+    {
+      "index": 8,
+      "part": "HXGN-12,(850X1000X2000) - 大横梁740",
+      "instances": 2,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        437.0856,
+        52.7654,
+        44.095
+      ],
+      "extents_m": [
+        790.0001,
+        85.0,
+        65.0
+      ],
+      "triangles": 7168
+    },
+    {
+      "index": 9,
+      "part": "HXGN-12,(850X1000X2000) - 侧封板900X1900",
+      "instances": 2,
+      "process": "panel_install",
+      "role": "flat_panel",
+      "suggested_robot": "R2",
+      "suggested_station": "stand",
+      "center_m": [
+        16.0856,
+        1010.2626,
+        511.5921
+      ],
+      "extents_m": [
+        2.0,
+        1900.0,
+        900.0
+      ],
+      "triangles": 4636
+    },
+    {
+      "index": 10,
+      "part": "HXGN-12,(850X1000X2000) - 顶封板840X990",
+      "instances": 1,
+      "process": "panel_install",
+      "role": "flat_panel",
+      "suggested_robot": "R2",
+      "suggested_station": "stand",
+      "center_m": [
+        437.0856,
+        2011.2654,
+        511.595
+      ],
+      "extents_m": [
+        840.0,
+        2.0,
+        990.0
+      ],
+      "triangles": 804
+    },
+    {
+      "index": 11,
+      "part": "HXGN-12,(850X1000X2000) - VS1安装板",
+      "instances": 1,
+      "process": "panel_install",
+      "role": "flat_panel",
+      "suggested_robot": "R2",
+      "suggested_station": "stand",
+      "center_m": [
+        438.0856,
+        723.0265,
+        732.095
+      ],
+      "extents_m": [
+        788.0,
+        50.0,
+        389.0
+      ],
+      "triangles": 4280
+    },
+    {
+      "index": 12,
+      "part": "HXGN-12,(850X1000X2000) - 大梁2000",
+      "instances": 4,
+      "process": "frame_install",
+      "role": "frame_member",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        847.0856,
+        1010.2654,
+        969.095
+      ],
+      "extents_m": [
+        30.0,
+        1996.0,
+        85.0
+      ],
+      "triangles": 38494
+    },
+    {
+      "index": 13,
+      "part": "HXGN-12,(850X1000X2000) - 小支架",
+      "instances": 3,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        264.4158,
+        1545.6576,
+        113.9345
+      ],
+      "extents_m": [
+        5.0,
+        89.3308,
+        41.7183
+      ],
+      "triangles": 418
+    },
+    {
+      "index": 14,
+      "part": "HXGN-12,(850X1000X2000) - 上下支板",
+      "instances": 2,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        474.8631,
+        1399.2947,
+        119.595
+      ],
+      "extents_m": [
+        570.0,
+        50.0,
+        50.0
+      ],
+      "triangles": 556
+    },
+    {
+      "index": 15,
+      "part": "HXGN-12,(850X1000X2000) - 左右支架",
+      "instances": 2,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        784.8631,
+        1519.2947,
+        119.595
+      ],
+      "extents_m": [
+        50.0,
+        290.0,
+        50.0
+      ],
+      "triangles": 404
+    },
+    {
+      "index": 16,
+      "part": "HXGN-12,(850X1000X2000) - 轴",
+      "instances": 1,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        444.8631,
+        1521.8003,
+        124.1119
+      ],
+      "extents_m": [
+        730.0,
+        24.9761,
+        24.9647
+      ],
+      "triangles": 152
+    },
+    {
+      "index": 17,
+      "part": "HXGN-12,(850X1000X2000) - 三角支板",
+      "instances": 1,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        698.6949,
+        1511.8536,
+        137.2453
+      ],
+      "extents_m": [
+        4.0,
+        85.7101,
+        67.463
+      ],
+      "triangles": 316
+    },
+    {
+      "index": 18,
+      "part": "HXGN-12,(850X1000X2000) - 右夹板",
+      "instances": 6,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        256.8631,
+        1509.4995,
+        312.4875
+      ],
+      "extents_m": [
+        6.0,
+        260.3013,
+        51.5811
+      ],
+      "triangles": 860
+    },
+    {
+      "index": 19,
+      "part": "HXGN-12,(850X1000X2000) - 联接件",
+      "instances": 2,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        827.5856,
+        1420.2654,
+        973.095
+      ],
+      "extents_m": [
+        55.0,
+        80.0,
+        73.0
+      ],
+      "triangles": 1084
+    },
+    {
+      "index": 20,
+      "part": "HXGN-12,(850X1000X2000) - 单门支架",
+      "instances": 4,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        64.0856,
+        1960.2654,
+        1023.595
+      ],
+      "extents_m": [
+        85.0,
+        20.0,
+        26.0
+      ],
+      "triangles": 1612
+    },
+    {
+      "index": 21,
+      "part": "HXGN-12,(850X1000X2000) - 双门支架",
+      "instances": 2,
+      "process": "bracket_install",
+      "role": "bracket",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        64.0856,
+        1420.2654,
+        1023.595
+      ],
+      "extents_m": [
+        85.0,
+        20.0,
+        26.0
+      ],
+      "triangles": 2440
+    },
+    {
+      "index": 22,
+      "part": "HXGN-12,(850X1000X2000) - 电流互LZZBJ9-10",
+      "instances": 2,
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        270.0856,
+        913.0095,
+        208.595
+      ],
+      "extents_m": [
+        158.0,
+        312.0,
+        228.0
+      ],
+      "triangles": 20930
+    },
+    {
+      "index": 23,
+      "part": "HXGN-12,(850X1000X2000) - 分支绝缘子",
+      "instances": 3,
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        264.9158,
+        1528.9546,
+        209.8071
+      ],
+      "extents_m": [
+        59.9916,
+        118.8113,
+        227.4276
+      ],
+      "triangles": 11224
+    },
+    {
+      "index": 24,
+      "part": "HXGN-12,(850X1000X2000) - JN15-12接地开关",
+      "instances": 1,
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        533.5856,
+        454.467,
+        220.095
+      ],
+      "extents_m": [
+        667.0,
+        328.495,
+        251.0
+      ],
+      "triangles": 316473
+    },
+    {
+      "index": 25,
+      "part": "HXGN-12,(850X1000X2000) - 上下大绝缘子",
+      "instances": 1,
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        474.8312,
+        1671.7939,
+        241.595
+      ],
+      "extents_m": [
+        89.9713,
+        155.0016,
+        194.0
+      ],
+      "triangles": 13250
+    },
+    {
+      "index": 26,
+      "part": "HXGN-12,(850X1000X2000) - ZN63(VS1-630A~1600)",
+      "instances": 1,
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        478.0856,
+        1038.0265,
+        744.595
+      ],
+      "extents_m": [
+        588.0,
+        580.0,
+        438.0
+      ],
+      "triangles": 182432
+    }
+  ]
+}

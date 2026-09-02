@@ -1,0 +1,602 @@
+{
+  "schema_version": 1,
+  "source_folder": "models/cabinet/processed",
+  "part_count": 15,
+  "contact_graph": {
+    "tolerance_m": 0.006,
+    "edges": [
+      [
+        "breaker",
+        "contactor",
+        0.0
+      ],
+      [
+        "breaker",
+        "door",
+        0.0
+      ],
+      [
+        "breaker",
+        "shell",
+        0.0
+      ],
+      [
+        "com5",
+        "plate",
+        0.0
+      ],
+      [
+        "com5",
+        "plc",
+        0.0
+      ],
+      [
+        "com5",
+        "shell",
+        0.0
+      ],
+      [
+        "contactor",
+        "door",
+        0.0
+      ],
+      [
+        "contactor",
+        "shell",
+        0.0
+      ],
+      [
+        "dma",
+        "door",
+        0.0
+      ],
+      [
+        "dma",
+        "rail_h1",
+        0.00388
+      ],
+      [
+        "dma",
+        "shell",
+        0.0
+      ],
+      [
+        "door",
+        "eds",
+        0.0
+      ],
+      [
+        "door",
+        "filter",
+        0.0
+      ],
+      [
+        "door",
+        "plate",
+        0.0
+      ],
+      [
+        "door",
+        "plc",
+        0.0
+      ],
+      [
+        "door",
+        "psu",
+        0.0
+      ],
+      [
+        "door",
+        "rail_h1",
+        0.0
+      ],
+      [
+        "door",
+        "rail_v1",
+        0.0
+      ],
+      [
+        "door",
+        "rail_v2",
+        0.0
+      ],
+      [
+        "door",
+        "servo",
+        0.0
+      ],
+      [
+        "door",
+        "shell",
+        0.0
+      ],
+      [
+        "eds",
+        "plate",
+        0.0
+      ],
+      [
+        "eds",
+        "shell",
+        0.0
+      ],
+      [
+        "filter",
+        "rail_v1",
+        0.00337
+      ],
+      [
+        "filter",
+        "shell",
+        0.0
+      ],
+      [
+        "plate",
+        "plc",
+        0.0
+      ],
+      [
+        "plate",
+        "rail_v1",
+        0.0
+      ],
+      [
+        "plate",
+        "rail_v2",
+        0.0
+      ],
+      [
+        "plate",
+        "shell",
+        0.0
+      ],
+      [
+        "plc",
+        "shell",
+        0.0
+      ],
+      [
+        "psu",
+        "shell",
+        0.0
+      ],
+      [
+        "rail_h1",
+        "rail_v1",
+        0.0
+      ],
+      [
+        "rail_h1",
+        "rail_v2",
+        0.0005
+      ],
+      [
+        "rail_h1",
+        "servo",
+        0.0043
+      ],
+      [
+        "rail_h1",
+        "shell",
+        0.0
+      ],
+      [
+        "rail_v1",
+        "shell",
+        0.0
+      ],
+      [
+        "rail_v2",
+        "shell",
+        0.0
+      ],
+      [
+        "servo",
+        "shell",
+        0.0
+      ]
+    ]
+  },
+  "constraints": {
+    "supports": [
+      [
+        "door",
+        "dma"
+      ],
+      [
+        "door",
+        "filter"
+      ],
+      [
+        "door",
+        "plate"
+      ],
+      [
+        "door",
+        "plc"
+      ],
+      [
+        "door",
+        "psu"
+      ],
+      [
+        "door",
+        "rail_h1"
+      ],
+      [
+        "door",
+        "rail_v1"
+      ],
+      [
+        "door",
+        "rail_v2"
+      ],
+      [
+        "door",
+        "servo"
+      ]
+    ],
+    "contains": [
+      [
+        "plc",
+        "com5"
+      ],
+      [
+        "shell",
+        "breaker"
+      ],
+      [
+        "shell",
+        "com5"
+      ],
+      [
+        "shell",
+        "contactor"
+      ],
+      [
+        "shell",
+        "dma"
+      ],
+      [
+        "shell",
+        "door"
+      ],
+      [
+        "shell",
+        "eds"
+      ],
+      [
+        "shell",
+        "filter"
+      ],
+      [
+        "shell",
+        "plc"
+      ],
+      [
+        "shell",
+        "psu"
+      ],
+      [
+        "shell",
+        "rail_h1"
+      ],
+      [
+        "shell",
+        "rail_v1"
+      ],
+      [
+        "shell",
+        "rail_v2"
+      ],
+      [
+        "shell",
+        "servo"
+      ]
+    ]
+  },
+  "assembly_order": [
+    "shell",
+    "door",
+    "filter",
+    "breaker",
+    "contactor",
+    "eds",
+    "rail_h1",
+    "rail_v1",
+    "rail_v2",
+    "plc",
+    "dma",
+    "com5",
+    "psu",
+    "servo",
+    "plate"
+  ],
+  "process_chain": [
+    {
+      "index": 1,
+      "part": "shell",
+      "process": "shell_feed",
+      "role": "base_feed",
+      "suggested_robot": "R1",
+      "suggested_station": "conveyor",
+      "center_m": [
+        0.0,
+        0.0,
+        0.0709
+      ],
+      "extents_m": [
+        0.4525,
+        0.2405,
+        0.142
+      ],
+      "triangles": 24836
+    },
+    {
+      "index": 2,
+      "part": "door",
+      "process": "panel_install",
+      "role": "flat_panel",
+      "suggested_robot": "R2",
+      "suggested_station": "stand",
+      "center_m": [
+        0.0,
+        0.0,
+        0.0066
+      ],
+      "extents_m": [
+        0.423,
+        0.23,
+        0.009
+      ],
+      "triangles": 15296
+    },
+    {
+      "index": 3,
+      "part": "filter",
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        0.1765,
+        0.0531,
+        0.0162
+      ],
+      "extents_m": [
+        0.0257,
+        0.0447,
+        0.0182
+      ],
+      "triangles": 2892
+    },
+    {
+      "index": 4,
+      "part": "breaker",
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        0.1343,
+        0.0442,
+        0.0185
+      ],
+      "extents_m": [
+        0.0315,
+        0.0465,
+        0.036
+      ],
+      "triangles": 3014
+    },
+    {
+      "index": 5,
+      "part": "contactor",
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        0.1068,
+        0.0439,
+        0.021
+      ],
+      "extents_m": [
+        0.0235,
+        0.038,
+        0.041
+      ],
+      "triangles": 11956
+    },
+    {
+      "index": 6,
+      "part": "eds",
+      "process": "small_part_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        -0.1783,
+        -0.0592,
+        0.0251
+      ],
+      "extents_m": [
+        0.0124,
+        0.0553,
+        0.0493
+      ],
+      "triangles": 142
+    },
+    {
+      "index": 7,
+      "part": "rail_h1",
+      "process": "rail_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        0.0003,
+        0.0,
+        0.0273
+      ],
+      "extents_m": [
+        0.385,
+        0.0175,
+        0.0403
+      ],
+      "triangles": 384
+    },
+    {
+      "index": 8,
+      "part": "rail_v1",
+      "process": "rail_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        0.2015,
+        -0.0025,
+        0.0273
+      ],
+      "extents_m": [
+        0.0175,
+        0.2325,
+        0.0403
+      ],
+      "triangles": 384
+    },
+    {
+      "index": 9,
+      "part": "rail_v2",
+      "process": "rail_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        -0.2015,
+        0.0013,
+        0.0273
+      ],
+      "extents_m": [
+        0.0175,
+        0.2325,
+        0.0403
+      ],
+      "triangles": 384
+    },
+    {
+      "index": 10,
+      "part": "plc",
+      "process": "device_install",
+      "role": "device",
+      "suggested_robot": "R6",
+      "suggested_station": "basket",
+      "center_m": [
+        0.047,
+        -0.0524,
+        0.0276
+      ],
+      "extents_m": [
+        0.11,
+        0.0474,
+        0.041
+      ],
+      "triangles": 29698
+    },
+    {
+      "index": 11,
+      "part": "dma",
+      "process": "small_part_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        0.0037,
+        0.0504,
+        0.0319
+      ],
+      "extents_m": [
+        0.0271,
+        0.0755,
+        0.0495
+      ],
+      "triangles": 24999
+    },
+    {
+      "index": 12,
+      "part": "com5",
+      "process": "small_part_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        0.0185,
+        -0.0536,
+        0.0447
+      ],
+      "extents_m": [
+        0.0185,
+        0.0269,
+        0.0093
+      ],
+      "triangles": 2394
+    },
+    {
+      "index": 13,
+      "part": "psu",
+      "process": "small_part_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        -0.1407,
+        0.0529,
+        0.0616
+      ],
+      "extents_m": [
+        0.015,
+        0.0575,
+        0.1075
+      ],
+      "triangles": 6382
+    },
+    {
+      "index": 14,
+      "part": "servo",
+      "process": "small_part_install",
+      "role": "thin_part",
+      "suggested_robot": "R3",
+      "suggested_station": "rack",
+      "center_m": [
+        -0.0325,
+        0.0531,
+        0.0695
+      ],
+      "extents_m": [
+        0.02,
+        0.0802,
+        0.1248
+      ],
+      "triangles": 4690
+    },
+    {
+      "index": 15,
+      "part": "plate",
+      "process": "panel_install",
+      "role": "flat_panel",
+      "suggested_robot": "R2",
+      "suggested_station": "stand",
+      "center_m": [
+        0.0,
+        -0.0651,
+        0.1203
+      ],
+      "extents_m": [
+        0.423,
+        0.009,
+        0.23
+      ],
+      "triangles": 15296
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<robot name="FTF_AGV_fixed_v4">
+  <!--
+    FTF AGV 小车模型 V4
+    源文件: FTF_AGF_ver_2.STL
+    处理: Y→Z轴转换, 60%缩放, XY居中, 微降以改善轮地接触
+    默认朝向: +X
+    尺寸约(m): 0.547 × 0.304 × 0.145
+  -->
+  <link name="base_link">
+    <!-- 视觉: 使用完整STL网格 -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="FTF_AGV_fixed_v4.stl"/>
+      </geometry>
+    </visual>
+    <!-- 碰撞: 简化长方体，尺寸略小于视觉网格以提高物理性能 -->
+    <collision>
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.50 0.28 0.10"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>
