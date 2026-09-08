@@ -1,0 +1,65 @@
+schema_version: 1
+policy_id: vertical_pi_transfer_v1
+
+compatibility:
+  legacy_robot_specific_corridors_enabled: false
+
+# This file is the executable motion-planning contract.  A generated fixed
+# path is valid only when its scene fingerprint, planner schema and this
+# policy fingerprint all match.
+canonical_cycle:
+  - PARK
+  - SOURCE_HIGH
+  - PICK_APP
+  - PICK_TCP
+  - GRIP
+  - PICK_APP
+  - SOURCE_HIGH
+  - TARGET_HIGH
+  - PLACE_APP
+  - PLACE_TCP
+  - RELEASE
+  - PLACE_APP
+  - READY_OR_PARK
+
+orientation:
+  physical_tool_axis: world_negative_z
+  keep_vertical_during_pick_place_and_transfer: true
+  yaw_change: safe_height_only
+  default_max_tilt_deg: 6.0
+  explicit_exception_max_tilt_deg: 15.0
+
+clearance:
+  obstacle_margin_m: 0.12
+  minimum_transit_tcp_z_m: 0.44
+  maximum_transit_tcp_z_m: 0.82
+  raise_increment_m: 0.05
+  workspace_preferred_tcp_z_m:
+    public_workspace_1: 0.50
+    public_workspace_2: 0.52
+    public_workspace_3: 0.55
+
+fallback_order:
+  - direct_vertical_pi
+  - raise_safe_height
+  - one_side_high_waypoint
+  - alternate_ik_branch
+  - constrained_ompl
+
+coordination:
+  shared_workspace_entry: single_robot_exclusive
+  allowed_parallelism: source_pick_and_prefetch_outside_workspace_only
+  pallet_motion_requires: all_robots_parked
+
+collision_priority:
+  - no_collision
+  - vertical_tool
+  - upright_workpiece
+  - fewer_waypoints
+  - shorter_joint_distance
+  - shorter_cycle_time
+
+contact_exclusions:
+  allowed_segment: app_to_tcp_only
+  carried_part_fixture_contact_only: true
+  robot_links_never_waived: true

@@ -7,9 +7,8 @@ ASSEMBLY coordinate frame (mm).  This script:
     1. selects the 14 parts of the minimal assembly unit (dropping duplicate
        instances and leftover hardware);
     2. decimates the heavy meshes with numpy-only vertex clustering;
-    3. applies the orientation-preserving transform (Rz(180 deg), scale
-       0.0005, origin at the assembly centre bottom) so the cabinet stands
-       upright with its open front facing scene -Y;
+    3. scales by 0.0005 and centres the cabinet with its back on the pallet
+       and its door opening facing world +Z;
     4. writes processed ASCII-named STLs to models/cabinet/processed/ plus a
        manifest.json used by the scene builder for pose assertions.
 
@@ -31,13 +30,12 @@ SOURCE_DIR = REPO_ROOT / "新建文件夹"
 OUTPUT_DIR = REPO_ROOT / "models" / "cabinet" / "processed"
 
 # Assembly frame (mm): X = width (905), Y = REAL HEIGHT (481), Z = depth
-# (285); the FULLY OPEN back is at z-min (just a folded lip), the door
-# frame at z-max.  The product is displayed as an OPEN-TOP box: the fully
-# open back faces UP, the door frame becomes the floor the devices rest
-# on, robots install from above.
+# (284). The solid back is at CAD z-max, open rim at z-min.
+# Rx(180 degrees) preserves handedness and places the genuine opening up.
 ASM_CENTER_X = 457.0
 ASM_CENTER_Y = 243.6
-ASM_TOP_Z = 287.0
+ASM_TOP_Z = 287.2
+ASM_BOTTOM_Z = 3.2
 SCALE = 0.0005
 
 # part_id -> (source substrings, triangle budget, grayscale colour)
@@ -45,9 +43,9 @@ SCALE = 0.0005
 # instance suffix are separated by the Chinese part name).
 PARTS = {
     "shell": (("2018090800227723",), 30000, [0.66, 0.66, 0.66]),
-    # 846x460x18 mm panel at the door-frame plane: this is the cabinet DOOR
-    # (kept as a spare part; the demo product is displayed without it).
-    "door": (("2018081800220728",), 20000, [0.78, 0.78, 0.78]),
+    # Internal mounting panel adjacent to the solid back; preinstalled in
+    # the shell supplied to R1. Not a door or a final closure operation.
+    "mounting_panel": (("2018081800220728",), 20000, [0.78, 0.78, 0.78]),
     "rail_v1": (("2018061400196431", "-2.STL"), 2000, [0.50, 0.50, 0.50]),
     "rail_v2": (("2018061400196431", "-3.STL"), 2000, [0.50, 0.50, 0.50]),
     "rail_h1": (("2018061400196432", "-3.STL"), 2000, [0.50, 0.50, 0.50]),
@@ -122,13 +120,7 @@ def decimate(verts: np.ndarray, budget: int) -> tuple[np.ndarray, float]:
 
 
 def transform(verts_mm: np.ndarray) -> np.ndarray:
-    """Assembly mm -> product-local metres.
-
-    Rx(180) then Rz(180) (proper rotation, det=+1): asm X -> scene X
-    (width), asm Y -> scene -Y, asm Z -> scene -Z.  The fully open back
-    (asm z-min) ends up at the TOP so the product reads as an open-top
-    box; the door frame (asm z-max) becomes the floor.
-    """
+    """CAD mm -> metres, back down and door opening up (proper rotation)."""
     x = (verts_mm[:, 0::3] - ASM_CENTER_X) * SCALE
     y = (ASM_CENTER_Y - verts_mm[:, 1::3]) * SCALE
     z = (ASM_TOP_Z - verts_mm[:, 2::3]) * SCALE
@@ -162,7 +154,7 @@ def write_stl(path: Path, verts: np.ndarray) -> None:
 def main() -> int:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sources = sorted(SOURCE_DIR.glob("*.STL"))
-    manifest: dict = {"parts": {}}
+    manifest: dict = {"frame": "cabinet_open_up_v2", "parts": {}}
     for part_id, (substrings, budget, color) in PARTS.items():
         matches = [
             path

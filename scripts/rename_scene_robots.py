@@ -85,7 +85,7 @@ EXPECTED_TIPS = {
     "R5": "R5_vacuum_tip",
     "R6": "R6_gripper_tip",
     "R7": "R7_tool_tip",
-    "R8": "R8_gripper_tip",
+    "R8": "R8_vacuum_tip",
 }
 
 

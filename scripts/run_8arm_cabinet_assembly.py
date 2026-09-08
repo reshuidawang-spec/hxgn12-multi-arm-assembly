@@ -25,26 +25,73 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
+from sim_bridge.motion_policy import (
+    load_motion_policy,
+    preferred_workspace_height,
+    safe_height_candidates,
+)
 from sim_bridge.scene_objects import ARM_JOINT_ALIASES, POINTS, ROBOT_IDS, ROBOT_TIPS
+from sim_bridge.cabinet_geometry import axis_intersections, triangles, flat_patch_height, require_open_top_shell
 
 
 SCENE_ROOT = "/FiveCR5A_Cell"
 SCENE_FILE = REPO_ROOT / "scenes" / "compact_cell.ttt"
 DEFAULT_PLAN = REPO_ROOT / "data" / "fixed_paths" / "eight_arm_cabinet.json"
+MOTION_POLICY = load_motion_policy()
+LEGACY_SPECIAL_CORRIDORS_ENABLED = bool(
+    MOTION_POLICY["compatibility"]["legacy_robot_specific_corridors_enabled"]
+)
 DOWN_QUATERNION = [1.0, 0.0, 0.0, 0.0]  # CoppeliaSim order: x, y, z, w
 HOME = [0.0] * 6
 MAX_FRAME_DELTA = math.radians(2.0)
 QUINTIC_MAX_SLOPE = 1.875
-MAX_DOWN_TILT = math.radians(15.0)
-MAX_TRANSFER_TILT = math.radians(40.0)
+MAX_DOWN_TILT = math.radians(
+    float(MOTION_POLICY["orientation"]["default_max_tilt_deg"])
+)
+MAX_TRANSFER_TILT = MAX_DOWN_TILT
 IK_POSITION_TOLERANCE = 0.003
 IK_ANGLE_TOLERANCE = math.radians(2.0)
 TRANSIT_POSITION_TOLERANCE = 0.015
-PLAN_SCHEMA_VERSION = 31
-MIN_TRANSIT_Z = 0.44
-PREFERRED_TRANSIT_Z = 0.50
-TRANSIT_CLEARANCE = 0.14
-MAX_TRANSIT_Z = 0.82
+PLAN_SCHEMA_VERSION = 36
+MIN_TRANSIT_Z = float(MOTION_POLICY["clearance"]["minimum_transit_tcp_z_m"])
+PREFERRED_TRANSIT_Z = preferred_workspace_height(
+    MOTION_POLICY, "public_workspace_1"
+)
+TRANSIT_CLEARANCE = float(MOTION_POLICY["clearance"]["obstacle_margin_m"])
+MAX_TRANSIT_Z = float(MOTION_POLICY["clearance"]["maximum_transit_tcp_z_m"])
+SAFE_Z_INCREMENT = float(MOTION_POLICY["clearance"]["raise_increment_m"])
+
+ACTION_WORKSPACES = {
+    ("R1", "WB1_PLACE"): "public_workspace_1",
+    ("R2", "RAIL_PLACE_H"): "public_workspace_1",
+    ("R3", "RAIL_PLACE_A"): "public_workspace_1",
+    ("R3", "RAIL_PLACE_B"): "public_workspace_1",
+    ("R4", "PSU_PLACE"): "public_workspace_2",
+    ("R4", "SERVO_PLACE"): "public_workspace_2",
+    ("R4", "EDS_PLACE"): "public_workspace_2",
+    ("R5", "PLC_PLACE"): "public_workspace_2",
+    ("R5", "DMA_PLACE"): "public_workspace_2",
+    ("R6", "SERVO_PLACE"): "public_workspace_2",  # legacy target name
+    ("R6", "DMA_PLACE"): "public_workspace_2",    # legacy target name
+    ("R6", "CONTACTOR_PLACE"): "public_workspace_2",
+    ("R6", "BREAKER_PLACE"): "public_workspace_2",
+    ("R6", "COM5_PLACE"): "public_workspace_3",
+    ("R7", "SCREW_1"): "public_workspace_3",
+    ("R7", "SCREW_2"): "public_workspace_3",
+    ("R7", "SCREW_3"): "public_workspace_3",
+    ("R7", "SCREW_4"): "public_workspace_3",
+    ("R8", "FILTER_PLACE"): "public_workspace_3",
+}
+
+
+def action_workspace(robot: str, stem: str) -> str | None:
+    """Return the shared workspace entered by an action, if any."""
+    return ACTION_WORKSPACES.get((robot, stem))
+
+
+def motion_policy_matches(plan: dict) -> bool:
+    expected = MOTION_POLICY["fingerprint"]["sha256"]
+    return plan.get("motion_policy", {}).get("fingerprint", {}).get("sha256") == expected
 
 ACTION_TARGETS = {
     "R1": ["SHELL_PICK", "WB1_PLACE"],
@@ -52,34 +99,36 @@ ACTION_TARGETS = {
     "R3": [
         "RAIL_PICK_A", "RAIL_PLACE_A", "RAIL_PICK_B", "RAIL_PLACE_B",
     ],
-    "R4": [],
-    "R5": ["PLC_PICK", "PLC_PLACE", "PSU_PICK", "PSU_PLACE"],
+    "R4": [
+        "PSU_PICK", "PSU_PLACE", "SERVO_PICK", "SERVO_PLACE",
+        "EDS_PICK", "EDS_PLACE",
+    ],
+    "R5": [
+        "PLC_PICK", "PLC_PLACE", "DMA_PICK", "DMA_PLACE",
+    ],
     "R6": [
-        "SERVO_PICK", "SERVO_PLACE", "DMA_PICK", "DMA_PLACE",
         "CONTACTOR_PICK", "CONTACTOR_PLACE", "BREAKER_PICK",
-        "BREAKER_PLACE",
+        "BREAKER_PLACE", "COM5_PICK", "COM5_PLACE",
     ],
     "R7": ["SCREW_1", "SCREW_2", "SCREW_3", "SCREW_4"],
-    "R8": [],
+    "R8": ["FILTER_PICK", "FILTER_PLACE"],
 }
 
-# R4 and R8 are intentionally parked in the conveyor version of the cell.
-# They remain available for a later inspection/rework operation, but no
-# longer carry the complete cabinet between stations.
-PARK_ONLY_STOWS = {
-    "R4": {
-        "joints": [-1.8683631960557017, -0.4111497735244001,
-                   -0.5830902493505132, -0.576096014417379,
-                   1.571382351849766, -1.7592756947317254],
-        "position": [-1.85, 0.45, 0.48],
-    },
-    "R8": {
-        "joints": [0.15417726611145444, -0.9097539174226865,
-                   0.6367671568352853, 1.8435949404162377,
-                   -1.5706422275267946, -0.21862780554855288],
-        "position": [0.321, -0.152, 0.50],
-    },
-}
+
+def planning_action_targets(
+    selected_robots: set[str] | None = None,
+) -> dict[str, list[str]]:
+    """Return the deterministic action subset for an incremental plan run."""
+    if selected_robots is None:
+        return ACTION_TARGETS
+    unknown = selected_robots.difference(ROBOT_IDS)
+    if unknown:
+        raise ValueError(f"unknown planning robots: {sorted(unknown)}")
+    return {
+        robot: ACTION_TARGETS[robot]
+        for robot in ROBOT_IDS
+        if robot in selected_robots
+    }
 
 R1_MAX_DOWN_TILT = math.radians(5.0)
 
@@ -132,7 +181,7 @@ R1_EDGE_ENDPOINTS = {
 GRIPPER_CLOSED_GAPS = {
     # Calibrated against the shell's real outer-frame thickness.  At this
     # opening both R1 inner rubber pads touch with about a 1 mm contact band.
-    "R1": 0.032,
+    "R1": 0.0115,
     # The R3 vertical rails are 17.5 mm wide.  The slim 6 mm pads use a
     # 17 mm inner opening, giving about 0.5 mm bilateral compression while
     # still fitting between the rail and cabinet side wall.
@@ -143,6 +192,19 @@ GRIPPER_CLOSED_GAPS = {
     "R4": 0.019,
 }
 GRIPPER_FINGER_THICKNESSES = {"R3": 0.006}
+
+
+def part_gripper_gap(robot: str, part_key: str | None = None) -> float:
+    """Match the two jaws to the actual device width (0.5 mm pad compression)."""
+    if robot in {'R4', 'R6'} and part_key is not None:
+        manifest = json.loads((REPO_ROOT / 'models/cabinet/processed/manifest.json').read_text())
+        info = manifest['parts'][part_key]
+        yz = tuple((info['bbox_hi'][i]+info['bbox_lo'][i])/2 for i in (1,2))
+        hits = axis_intersections(triangles(part_key),yz,0)
+        if len(hits)<2:
+            raise RuntimeError(f'{part_key} has no opposing faces at its grasp point')
+        return max(0.001, float(hits[-1]-hits[0]) - 0.0005)
+    return GRIPPER_CLOSED_GAPS.get(robot, 0.035)
 
 R1_LOADED_PLACE_WAYPOINTS = [
     [-3.65, 1.3625, 0.52],
@@ -203,6 +265,23 @@ R2_RAIL_ENDPOINTS = {
 # Keep a one-degree numerical/path interpolation margin; all other R3 process
 # poses remain essentially vertical.
 R3_MAX_DOWN_TILT = math.radians(6.0)
+R6_STOW_Z = 0.48
+R6_COM5_TRANSIT_Z = 0.48
+R8_DOOR_TRANSIT_Z = 0.50
+R8_DOOR_STOW_POSITION = [0.789, -0.489, 0.436]
+R8_DOOR_STOW_JOINTS = [
+    0.39695875138059167,
+    0.09871747018262367,
+    1.1348501666777306,
+    0.3367129106514013,
+    -1.5707462581566811,
+    2.316787523110607,
+]
+# A straight source-to-staging chord crosses the R8 base and makes the large
+# horizontal door proxy contact Link2.  One high waypoint on the outside of
+# the base is the minimum collision-free detour; all segments retain the same
+# vertical-down tool quaternion.
+R8_DOOR_CLEARANCE_WAYPOINT = [0.7595760221444958, 0.06678821817552302, 0.50]
 R3_RAIL_STOW_POSITION = [-2.35, -0.76625, 0.48]
 R3_RAIL_STOW_JOINTS = [
     -0.8196571254928204,
@@ -417,41 +496,56 @@ R3_HANDOFF_DETOUR = [
     [1.0358324542766972, -0.3728614662483145, -0.9000794547702932,
      -0.2984947023906299, 1.570848682509303, 1.228027341808474],
 ]
+# The deterministic R3-B planner enters its assembly-guidance segment at
+# frame 197, before reaching the nominal APP at frame 248.  Runtime collision
+# masks must use the same boundary as planning; all non-product obstacles and
+# all robot-link collisions remain active through this segment.
+R3_RAIL_B_CONTACT_START_FRAME = 197
 
 PARTS = {
     "shell": ("Shell_1", "REF_shell", "/FiveCR5A_Cell/Parts/Shell_Stack"),
     "rail_h": ("Rail_H1", "REF_rail_h1", "/FiveCR5A_Cell/Baskets/R2_Stand"),
     "rail_a": ("Rail_1", "REF_rail_v1", "/FiveCR5A_Cell/Baskets/R3_Rail_Rack"),
     "rail_b": ("Rail_2", "REF_rail_v2", "/FiveCR5A_Cell/Baskets/R3_Rail_Rack"),
+    "psu": ("PSU_1", "REF_psu", "/FiveCR5A_Cell/Baskets/R4_Device_Basket"),
+    "servo": ("Servo_1", "REF_servo", "/FiveCR5A_Cell/Baskets/R4_Device_Basket"),
+    "eds": ("EDS_1", "REF_eds", "/FiveCR5A_Cell/Baskets/R4_Device_Basket"),
     "plc": ("PLC_1", "REF_plc", "/FiveCR5A_Cell/Baskets/R5_Device_Basket"),
-    "psu": ("PSU_1", "REF_psu", "/FiveCR5A_Cell/Baskets/R5_Device_Basket"),
-    "servo": ("Servo_1", "REF_servo", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
-    "dma": ("DMA_1", "REF_dma", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
+    "dma": ("DMA_1", "REF_dma", "/FiveCR5A_Cell/Baskets/R5_Device_Basket"),
+    "filter": ("Filter_1", "REF_filter", "/FiveCR5A_Cell/Baskets/R8_Device_Basket"),
     "contactor": ("Contactor_1", "REF_contactor", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
     "breaker": ("Breaker_1", "REF_breaker", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
+    "com5": ("COM5_1", "REF_com5", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
 }
 
 STATIONS = {
     "wb1": [-3.15, 0.25, 0.27],
+    # A short in-station conveyor advance brings R3's second vertical-rail
+    # target away from the west reach boundary without changing workspaces.
+    "wb1_micro": [-3.03, 0.25, 0.27],
     "handoff": [-2.45, 0.40, 0.27],
     "wb2": [-1.20, 0.25, 0.27],
+    "wb2_micro": [-1.08, 0.25, 0.27],
     "staging": [0.05, 0.25, 0.27],
     "output": [0.75, 0.25, 0.270],
 }
 R4_HANDOFF_CENTER = [-2.05, 0.45, 0.27]
-REFERENCE_CENTER = [0.75, -0.10, 0.27]
+REFERENCE_CENTER = [1.65, 1.25, 0.27]
 
 PICK_PART = {
     ("R1", "SHELL_PICK"): "shell",
     ("R2", "RAIL_PICK_H"): "rail_h",
     ("R3", "RAIL_PICK_A"): "rail_a",
     ("R3", "RAIL_PICK_B"): "rail_b",
+    ("R4", "PSU_PICK"): "psu",
+    ("R4", "SERVO_PICK"): "servo",
+    ("R4", "EDS_PICK"): "eds",
     ("R5", "PLC_PICK"): "plc",
-    ("R5", "PSU_PICK"): "psu",
-    ("R6", "SERVO_PICK"): "servo",
-    ("R6", "DMA_PICK"): "dma",
+    ("R5", "DMA_PICK"): "dma",
     ("R6", "CONTACTOR_PICK"): "contactor",
     ("R6", "BREAKER_PICK"): "breaker",
+    ("R6", "COM5_PICK"): "com5",
+    ("R8", "FILTER_PICK"): "filter",
 }
 
 PLACE_PART = {
@@ -459,25 +553,44 @@ PLACE_PART = {
     ("R2", "RAIL_PLACE_H"): "rail_h",
     ("R3", "RAIL_PLACE_A"): "rail_a",
     ("R3", "RAIL_PLACE_B"): "rail_b",
+    ("R4", "PSU_PLACE"): "psu",
+    ("R4", "SERVO_PLACE"): "servo",
+    ("R4", "EDS_PLACE"): "eds",
     ("R5", "PLC_PLACE"): "plc",
-    ("R5", "PSU_PLACE"): "psu",
-    ("R6", "SERVO_PLACE"): "servo",
-    ("R6", "DMA_PLACE"): "dma",
+    ("R5", "DMA_PLACE"): "dma",
     ("R6", "CONTACTOR_PLACE"): "contactor",
     ("R6", "BREAKER_PLACE"): "breaker",
+    ("R6", "COM5_PLACE"): "com5",
+    ("R8", "FILTER_PLACE"): "filter",
 }
+
+
+def pick_stem_for_part(robot: str, part_key: str) -> str:
+    matches = [
+        stem
+        for (candidate_robot, stem), key in PICK_PART.items()
+        if candidate_robot == robot and key == part_key
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected one {robot} pick action for {part_key}, found {matches}"
+        )
+    return matches[0]
 
 SOURCE_FIXTURE = {
     "shell": "/FiveCR5A_Cell/Conveyors/Cabinet_Conveyor",
     "rail_h": "/FiveCR5A_Cell/Baskets/R2_Stand",
     "rail_a": "/FiveCR5A_Cell/Baskets/R3_Rail_Rack",
     "rail_b": "/FiveCR5A_Cell/Baskets/R3_Rail_Rack",
+    "psu": "/FiveCR5A_Cell/Baskets/R4_Device_Basket",
+    "servo": "/FiveCR5A_Cell/Baskets/R4_Device_Basket",
+    "eds": "/FiveCR5A_Cell/Baskets/R4_Device_Basket",
     "plc": "/FiveCR5A_Cell/Baskets/R5_Device_Basket",
-    "psu": "/FiveCR5A_Cell/Baskets/R5_Device_Basket",
-    "servo": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
-    "dma": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
+    "dma": "/FiveCR5A_Cell/Baskets/R5_Device_Basket",
     "contactor": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
     "breaker": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
+    "com5": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
+    "filter": "/FiveCR5A_Cell/Baskets/R8_Device_Basket",
 }
 
 # Only these fixtures are ignored, and only during the final APP <-> TCP
@@ -487,16 +600,19 @@ CONTACT_STATION = {
     ("R2", "RAIL_PLACE_H"): "wb1",
     ("R3", "RAIL_PLACE_A"): "wb1",
     ("R3", "RAIL_PLACE_B"): "wb1",
+    ("R4", "PSU_PLACE"): "wb2",
+    ("R4", "SERVO_PLACE"): "wb2",
+    ("R4", "EDS_PLACE"): "wb2",
     ("R5", "PLC_PLACE"): "wb2",
-    ("R5", "PSU_PLACE"): "wb2",
-    ("R6", "SERVO_PLACE"): "wb2",
-    ("R6", "DMA_PLACE"): "wb2",
+    ("R5", "DMA_PLACE"): "wb2",
     ("R6", "CONTACTOR_PLACE"): "wb2",
     ("R6", "BREAKER_PLACE"): "wb2",
+    ("R6", "COM5_PLACE"): "staging",
     ("R7", "SCREW_1"): "staging",
     ("R7", "SCREW_2"): "staging",
     ("R7", "SCREW_3"): "staging",
     ("R7", "SCREW_4"): "staging",
+    ("R8", "FILTER_PLACE"): "staging",
 }
 
 STATION_FIXTURE_PATHS = {
@@ -504,8 +620,16 @@ STATION_FIXTURE_PATHS = {
         f"{SCENE_ROOT}/Conveyors/Central_Indexing_Conveyor",
         f"{SCENE_ROOT}/Conveyors/Indexing_Pallet_1",
     ],
+    "wb1_micro": [
+        f"{SCENE_ROOT}/Conveyors/Central_Indexing_Conveyor",
+        f"{SCENE_ROOT}/Conveyors/Indexing_Pallet_1",
+    ],
     "handoff": [f"{SCENE_ROOT}/Areas/Handoff_Area"],
     "wb2": [
+        f"{SCENE_ROOT}/Conveyors/Central_Indexing_Conveyor",
+        f"{SCENE_ROOT}/Conveyors/Indexing_Pallet_1",
+    ],
+    "wb2_micro": [
         f"{SCENE_ROOT}/Conveyors/Central_Indexing_Conveyor",
         f"{SCENE_ROOT}/Conveyors/Indexing_Pallet_1",
     ],
@@ -519,8 +643,10 @@ STATION_FIXTURE_PATHS = {
     ],
     "r2_stand": [f"{SCENE_ROOT}/Baskets/R2_Stand"],
     "r3_rack": [f"{SCENE_ROOT}/Baskets/R3_Rail_Rack"],
+    "r4_basket": [f"{SCENE_ROOT}/Baskets/R4_Device_Basket"],
     "r5_basket": [f"{SCENE_ROOT}/Baskets/R5_Device_Basket"],
     "r6_basket": [f"{SCENE_ROOT}/Baskets/R6_Device_Basket"],
+    "r8_basket": [f"{SCENE_ROOT}/Baskets/R8_Device_Basket"],
 }
 
 # Transfer stems whose APP -> TCP contact leg lands on a station fixture
@@ -534,23 +660,30 @@ BASKET_PICK_CONTAINER = {
     ("R2", "RAIL_PICK_H"): "r2_stand",
     ("R3", "RAIL_PICK_A"): "r3_rack",
     ("R3", "RAIL_PICK_B"): "r3_rack",
+    ("R4", "PSU_PICK"): "r4_basket",
+    ("R4", "SERVO_PICK"): "r4_basket",
+    ("R4", "EDS_PICK"): "r4_basket",
     ("R5", "PLC_PICK"): "r5_basket",
-    ("R5", "PSU_PICK"): "r5_basket",
-    ("R6", "SERVO_PICK"): "r6_basket",
-    ("R6", "DMA_PICK"): "r6_basket",
+    ("R5", "DMA_PICK"): "r5_basket",
     ("R6", "CONTACTOR_PICK"): "r6_basket",
     ("R6", "BREAKER_PICK"): "r6_basket",
+    ("R6", "COM5_PICK"): "r6_basket",
+    ("R8", "FILTER_PICK"): "r8_basket",
 }
 BASKET_PICK_MATES = {
-    ("R2", "RAIL_PICK_H"): ["Door_Spare"],
+    ("R2", "RAIL_PICK_H"): [],
     ("R3", "RAIL_PICK_A"): ["Rail_2"],
     ("R3", "RAIL_PICK_B"): ["Rail_1"],
-    ("R5", "PLC_PICK"): ["PSU_1"],
-    ("R5", "PSU_PICK"): ["PLC_1"],
-    ("R6", "SERVO_PICK"): ["DMA_1", "Contactor_1", "Breaker_1"],
-    ("R6", "DMA_PICK"): ["Servo_1", "Contactor_1", "Breaker_1"],
-    ("R6", "CONTACTOR_PICK"): ["Servo_1", "DMA_1", "Breaker_1"],
-    ("R6", "BREAKER_PICK"): ["Servo_1", "DMA_1", "Contactor_1"],
+    ("R4", "PSU_PICK"): ["Servo_1", "EDS_1"],
+    ("R4", "SERVO_PICK"): ["PSU_1", "EDS_1"],
+    ("R4", "EDS_PICK"): ["PSU_1", "Servo_1"],
+    ("R5", "PLC_PICK"): ["DMA_1", "Filter_1"],
+    ("R5", "DMA_PICK"): ["PLC_1", "Filter_1"],
+    ("R5", "FILTER_PICK"): ["PLC_1", "DMA_1"],
+    ("R6", "CONTACTOR_PICK"): ["Breaker_1", "COM5_1"],
+    ("R6", "BREAKER_PICK"): ["Contactor_1", "COM5_1"],
+    ("R6", "COM5_PICK"): ["Contactor_1", "Breaker_1"],
+    ("R8", "DOOR_PICK"): [],
 }
 
 
@@ -668,6 +801,20 @@ class Scene:
                 ("Floor_Zone_", "Floor_Path_", "Floor_Border_")
             )
         ]
+        scene_shapes = [
+            int(handle)
+            for handle in self.sim.getObjectsInTree(
+                int(self.sim.handle_scene), self.sim.object_shape_type, 0
+            )
+        ]
+        self.collision_proxies = {
+            handle
+            for handle in scene_shapes
+            if str(self.sim.getObjectAlias(handle, 0)).startswith("COL_")
+        }
+        self.proxied_visual_shapes = {
+            int(self.sim.getObjectParent(proxy)) for proxy in self.collision_proxies
+        }
         self.roots = {robot: int(self.sim.getObject(f"/{robot}")) for robot in ROBOT_IDS}
         self.joints = {}
         self.tips = {}
@@ -683,7 +830,11 @@ class Scene:
                 int(self.sim.handle_scene), self.sim.handle_all, 0
             )
             if str(self.sim.getObjectAlias(handle, 0))
-            in {"Assembly_Collision_Planner", "Assembly_Runtime_Batch"}
+            in {
+                "Motion_Collision_Planner",
+                "Assembly_Collision_Planner",
+                "Assembly_Runtime_Batch",
+            }
         ]
         if stale_helpers:
             self.sim.removeObjects(stale_helpers)
@@ -762,7 +913,24 @@ class Scene:
         self._planner_script: int | None = None
 
     def by_alias(self, alias: str) -> int:
-        return unique_alias(self.sim, self.cell, alias)
+        matches = [
+            int(handle)
+            for handle in self.sim.getObjectsInTree(
+                self.cell, self.sim.handle_all, 0
+            )
+            if str(self.sim.getObjectAlias(handle, 0)) == alias
+        ]
+        if not matches:
+            matches = [
+                int(handle)
+                for handle in self.sim.getObjectsInTree(
+                    int(self.sim.handle_scene), self.sim.handle_all, 0
+                )
+                if str(self.sim.getObjectAlias(handle, 0)) == alias
+            ]
+        if len(matches) != 1:
+            raise RuntimeError(f"expected one object named {alias}, found {len(matches)}")
+        return matches[0]
 
     def set_joints(self, robot: str, values: Iterable[float]) -> None:
         for handle, value in zip(self.joints[robot], values):
@@ -821,6 +989,10 @@ class Scene:
         self.sim.addItemToCollection(
             environment, self.sim.handle_tree, self.cell, 0
         )
+        for handle in self.proxied_visual_shapes:
+            self.sim.addItemToCollection(
+                environment, self.sim.handle_single, int(handle), 1
+            )
         for handle in self.decorative_ground:
             self.sim.addItemToCollection(
                 environment, self.sim.handle_single, handle, 1
@@ -866,13 +1038,24 @@ class Scene:
                     handle, self.sim.object_shape_type, 0
                 )
             )
-        self.sim.addItemToCollection(
-            moving, self.sim.handle_tree, int(carried), 0
-        )
+        carried_geometry = [
+            int(shape)
+            for shape in self.sim.getObjectsInTree(
+                int(carried), self.sim.object_shape_type, 0
+            )
+            if int(shape) not in self.proxied_visual_shapes
+        ]
+        for shape in carried_geometry:
+            self.sim.addItemToCollection(
+                moving, self.sim.handle_single, shape, 0
+            )
         for shape in self.sim.getObjectsInTree(
             self.cell, self.sim.object_shape_type, 0
         ):
-            if int(shape) not in excluded_shapes:
+            if (
+                int(shape) not in excluded_shapes
+                and int(shape) not in self.proxied_visual_shapes
+            ):
                 self.sim.addItemToCollection(
                     environment, self.sim.handle_single, int(shape), 0
                 )
@@ -1089,6 +1272,46 @@ function applyFrame(joints, values, robotCollections, environmentCollections, sp
     end
     return hits
 end
+
+function applyFrameBatch(joints, flatValues, frameCount, movingCollections,
+                         environmentCollections, activeMask, pairCount,
+                         spinHandle, spinStart, spinStep)
+    local function invoke()
+        local jointCount=#joints
+        for frame=0,frameCount-1,1 do
+            local valueOffset=frame*jointCount
+            for joint=1,jointCount,1 do
+                sim.setJointPosition(joints[joint],flatValues[valueOffset+joint])
+            end
+            if spinHandle >= 0 then
+                local p=sim.getObjectParent(spinHandle)
+                local o=sim.getObjectOrientation(spinHandle,p)
+                o[3]=spinStart+frame*spinStep
+                sim.setObjectOrientation(spinHandle,p,o)
+            end
+            local maskOffset=frame*pairCount
+            for pairIndex=1,pairCount,1 do
+                if activeMask[maskOffset+pairIndex] > 0 then
+                    local result,pair=sim.checkCollision(
+                        movingCollections[pairIndex],
+                        environmentCollections[pairIndex]
+                    )
+                    if result>0 then
+                        return {false,frame,pair[1],pair[2],''}
+                    end
+                end
+            end
+        end
+        return {true,-1,-1,-1,''}
+    end
+    local stopped=sim.getSimulationState()==sim.simulation_stopped
+    local previousStepLevel=0
+    if not stopped then previousStepLevel=sim.setStepping(true) end
+    local ok,result=xpcall(invoke,debug.traceback)
+    if not stopped then sim.setStepping(previousStepLevel) end
+    if not ok then return false,-2,-1,-1,result end
+    return table.unpack(result)
+end
 """
         self._batch_script = int(self.sim.createScript(self.sim.scripttype_customization, code, 0))
         self.sim.setObjectAlias(self._batch_script, "Assembly_Runtime_Batch")
@@ -1129,6 +1352,57 @@ end
                     f"{self.sim.getObjectAlias(int(hits[index + 1]), 1)}"
                 )
             raise RuntimeError("collision detected: " + ", ".join(names))
+
+    def apply_frame_batch(
+        self,
+        tracks: list[Track],
+        start: int,
+        stop: int,
+        all_pairs: list[tuple[int, int]],
+        active_masks: list[list[int]],
+        *,
+        spin_handle: int = -1,
+    ) -> None:
+        """Apply and collision-check ``[start, stop)`` inside CoppeliaSim."""
+        if self._batch_script is None or stop <= start:
+            return
+        joint_handles: list[int] = []
+        for track in tracks:
+            joint_handles.extend(self.joints[track.robot])
+        for chunk_start in range(start, stop, 120):
+            chunk_stop = min(chunk_start + 120, stop)
+            flat_values: list[float] = []
+            flat_masks: list[int] = []
+            for frame_index in range(chunk_start, chunk_stop):
+                for track in tracks:
+                    flat_values.extend(
+                        track.frames[min(frame_index, len(track.frames) - 1)]
+                    )
+                flat_masks.extend(active_masks[frame_index])
+            valid, relative_frame, first, second, detail = self.sim.callScriptFunction(
+                "applyFrameBatch",
+                self._batch_script,
+                joint_handles,
+                flat_values,
+                chunk_stop - chunk_start,
+                [pair[0] for pair in all_pairs],
+                [pair[1] for pair in all_pairs],
+                flat_masks,
+                len(all_pairs),
+                spin_handle,
+                float(chunk_start * 0.45),
+                0.45 if spin_handle >= 0 else 0.0,
+            )
+            if not bool(valid):
+                if int(relative_frame) == -2:
+                    raise RuntimeError(f"CoppeliaSim batch validation error: {detail}")
+                absolute_frame = chunk_start + int(relative_frame)
+                raise RuntimeError(
+                    "collision detected: "
+                    f"{self.sim.getObjectAlias(int(first), 1)} <-> "
+                    f"{self.sim.getObjectAlias(int(second), 1)} "
+                    f"at coordinated frame {absolute_frame}/{len(active_masks) - 1}"
+                )
 
 
 def normalize_config(values: Iterable[float]) -> list[float]:
@@ -1183,6 +1457,7 @@ def ik_candidates(
     attempts: int = 48,
     max_solutions: int = 8,
     fixed_quaternion: list[float] | None = None,
+    include_other_robots: bool = True,
 ) -> list[list[float]]:
     """Find several down-facing IK branches and reject colliding branches."""
     sim, ik = scene.sim, scene.ik
@@ -1204,7 +1479,9 @@ def ik_candidates(
     )
     environment = int(ik.createEnvironment())
     group = int(ik.createGroup(environment))
-    pair = scene.create_collision_pair(robot, exclusions)
+    pair = scene.create_collision_pair(
+        robot, exclusions, include_other_robots=include_other_robots
+    )
     try:
         ik.setGroupCalculation(environment, group, ik.method_damped_least_squares, 0.20, 250)
         element, _, _ = ik.addElementFromScene(
@@ -1294,6 +1571,7 @@ def cartesian_down_line(
     max_tilt: float = MAX_DOWN_TILT,
     additional_pairs: Iterable[tuple[int, int]] = (),
     moving_exclusions: Iterable[int] = (),
+    include_other_robots: bool = True,
 ) -> list[list[float]]:
     """IK-sample a straight tool-down approach and collision-check every sample."""
     sim, ik = scene.sim, scene.ik
@@ -1313,7 +1591,10 @@ def cartesian_down_line(
     environment = int(ik.createEnvironment())
     group = int(ik.createGroup(environment))
     pair = scene.create_collision_pair(
-        robot, exclusions, moving_exclusions=moving_exclusions
+        robot,
+        exclusions,
+        moving_exclusions=moving_exclusions,
+        include_other_robots=include_other_robots,
     )
     pairs = [pair, *list(additional_pairs)]
     distance = math.sqrt(sum((b - a) ** 2 for a, b in zip(start_position, end_position)))
@@ -1420,6 +1701,9 @@ def cartesian_down_route(
     start_position: list[float],
     waypoints: list[list[float]],
     exclusions: Iterable[int],
+    fixed_quaternion: list[float] | None = None,
+    additional_pairs: Iterable[tuple[int, int]] = (),
+    moving_exclusions: Iterable[int] = (),
 ) -> list[list[float]]:
     path = [list(start_config)]
     config = list(start_config)
@@ -1430,6 +1714,9 @@ def cartesian_down_route(
         segment = cartesian_down_line(
             scene, robot, config, position, waypoint, exclusions,
             position_tolerance=TRANSIT_POSITION_TOLERANCE,
+            fixed_quaternion=fixed_quaternion,
+            additional_pairs=additional_pairs,
+            moving_exclusions=moving_exclusions,
         )
         path.extend(segment[1:])
         config = path[-1]
@@ -1496,32 +1783,40 @@ def validated_joint_path(
     try:
         scene.install_planner_script()
         pairs = [pair, *list(additional_pairs)]
-        flat = [value for frame in frames for value in frame]
-        valid, index, observed_tilt, observed_z, first, second = (
-            scene.sim.callScriptFunction(
-                "validateJointPath",
-                scene._planner_script,
-                scene.joints[robot],
-                scene.down_tips[robot],
-                [value[0] for value in pairs],
-                [value[1] for value in pairs],
-                flat,
-                float(max_tilt),
-                float(min_tip_z),
-            )
-        )
-        if not valid:
-            collision = ""
-            if int(first) >= 0 and int(second) >= 0:
-                collision = (
-                    f", collision={scene.sim.getObjectAlias(int(first), 1)} <-> "
-                    f"{scene.sim.getObjectAlias(int(second), 1)}"
+        # Keep each remote call bounded.  A complete-scene collision query is
+        # expensive after adding the conveyor and pallet; sending hundreds of
+        # samples in one Lua call can starve the ZMQ service before it returns
+        # a useful collision frame.
+        batch_size = 12
+        for batch_start in range(0, len(frames), batch_size):
+            batch = frames[batch_start:batch_start + batch_size]
+            flat = [value for frame in batch for value in frame]
+            valid, index, observed_tilt, observed_z, first, second = (
+                scene.sim.callScriptFunction(
+                    "validateJointPath",
+                    scene._planner_script,
+                    scene.joints[robot],
+                    scene.down_tips[robot],
+                    [value[0] for value in pairs],
+                    [value[1] for value in pairs],
+                    flat,
+                    float(max_tilt),
+                    float(min_tip_z),
                 )
-            raise RuntimeError(
-                f"{robot} joint corridor invalid at frame {int(index)}: "
-                f"max_tilt={math.degrees(float(observed_tilt)):.1f} deg, "
-                f"min_z={float(observed_z):.3f}{collision}"
             )
+            if not valid:
+                collision = ""
+                if int(first) >= 0 and int(second) >= 0:
+                    collision = (
+                        f", collision={scene.sim.getObjectAlias(int(first), 1)} <-> "
+                        f"{scene.sim.getObjectAlias(int(second), 1)}"
+                    )
+                raise RuntimeError(
+                    f"{robot} joint corridor invalid at frame "
+                    f"{batch_start + int(index)}: "
+                    f"max_tilt={math.degrees(float(observed_tilt)):.1f} deg, "
+                    f"min_z={float(observed_z):.3f}{collision}"
+                )
         return frames
     finally:
         scene.destroy_collision_pair(pair)
@@ -1630,19 +1925,31 @@ def attach_part_for_loaded_planning(
         float(value) for value in scene.sim.getObjectMatrix(part, -1)
     ]
     tool = scene.tool_roots[robot]
-    left = unique_alias(scene.sim, scene.roots[robot], f"{robot}T_left_finger_link")
-    right = unique_alias(scene.sim, scene.roots[robot], f"{robot}T_right_finger_link")
-    left_position = list(scene.sim.getObjectPosition(left, tool))
-    right_position = list(scene.sim.getObjectPosition(right, tool))
-    closed_gap = GRIPPER_CLOSED_GAPS.get(robot, 0.035)
-    finger_thickness = GRIPPER_FINGER_THICKNESSES.get(robot, 0.020)
-    closed_y = (closed_gap + finger_thickness) / 2.0
-    closed_left = list(left_position)
-    closed_right = list(right_position)
-    closed_left[1] = closed_y
-    closed_right[1] = -closed_y
-    scene.sim.setObjectPosition(left, tool, closed_left)
-    scene.sim.setObjectPosition(right, tool, closed_right)
+    left = -1
+    right = -1
+    left_position: list[float] = []
+    right_position: list[float] = []
+    # Magnetic and vacuum tools have no finger links.  Their measured grasp
+    # transform is still reproduced by parenting the part at the pick TCP;
+    # only mechanical grippers need a temporary close during loaded planning.
+    if robot not in {"R2", "R5", "R7", "R8"}:
+        left = unique_alias(
+            scene.sim, scene.roots[robot], f"{robot}T_left_finger_link"
+        )
+        right = unique_alias(
+            scene.sim, scene.roots[robot], f"{robot}T_right_finger_link"
+        )
+        left_position = list(scene.sim.getObjectPosition(left, tool))
+        right_position = list(scene.sim.getObjectPosition(right, tool))
+        closed_gap = part_gripper_gap(robot, part_key)
+        finger_thickness = GRIPPER_FINGER_THICKNESSES.get(robot, 0.020)
+        closed_y = (closed_gap + finger_thickness) / 2.0
+        closed_left = list(left_position)
+        closed_right = list(right_position)
+        closed_left[1] = closed_y
+        closed_right[1] = -closed_y
+        scene.sim.setObjectPosition(left, tool, closed_left)
+        scene.sim.setObjectPosition(right, tool, closed_right)
     scene.set_joints(robot, pick_config)
     scene.sim.setObjectParent(part, scene.tips[robot], True)
     return (
@@ -1663,8 +1970,10 @@ def restore_part_after_loaded_planning(
     ) = state
     scene.sim.setObjectParent(part, parent, False)
     scene.sim.setObjectMatrix(part, -1, world_matrix)
-    scene.sim.setObjectPosition(left, tool, left_position)
-    scene.sim.setObjectPosition(right, tool, right_position)
+    if left >= 0:
+        scene.sim.setObjectPosition(left, tool, left_position)
+    if right >= 0:
+        scene.sim.setObjectPosition(right, tool, right_position)
 
 
 def r3_fixed_down_action(
@@ -2204,6 +2513,22 @@ def action_exclusions(scene: Scene, robot: str, stem: str) -> tuple[list[int], l
         )
         transit.append(part)
         contact.append(part)
+    # A source bin and its neighbouring parts are obstacles, including on
+    # APP/TCP legs. Only the held/touched part is exempt from tool contact.
+    return transit, contact
+
+
+def carried_contact_handles(scene: Scene, robot: str, stem: str) -> list[int]:
+    """Fixture contacts apply to the payload, never to robot links."""
+    station = CONTACT_STATION.get((robot,stem)) or BASKET_PICK_CONTAINER.get((robot,stem))
+    paths = STATION_FIXTURE_PATHS.get(station, [])
+    if (robot,stem) in PICK_PART:
+        paths = [SOURCE_FIXTURE[PICK_PART[(robot,stem)]]]
+    return [int(scene.sim.getObject(path)) for path in paths]
+
+
+def _legacy_action_exclusions_unused(scene: Scene, robot: str, stem: str):
+    transit, contact = [], []
     # Pick/place contact legs may intentionally touch their source or target
     # station fixture.  Exclude that fixture only from APP <-> TCP; all high
     # transit frames keep it as a strict obstacle.  This applies to ordinary
@@ -2252,6 +2577,13 @@ def stow_position_candidates(
     radius = max(math.hypot(dx, dy), 1e-6)
     tangent = [-dy / radius, dx / radius]
     xy_candidates: list[list[float]] = []
+    # R1 lifts a cabinet shell whose footprint is much larger than the tool.
+    # Pulling that payload back toward the base folds it over Link2.  Its PARK
+    # therefore stays vertically above the source-side APP before any generic
+    # base-biased candidates are considered.  This is still the canonical Pi
+    # policy: vertical lift, high translation, vertical descent.
+    if robot in {"R1", "R2"}:
+        xy_candidates.append(list(first_app_position[:2]))
     for fraction in (0.58, 0.72):
         center = [base[0] + fraction * dx, base[1] + fraction * dy]
         xy_candidates.append(center)
@@ -2262,11 +2594,12 @@ def stow_position_candidates(
                     center[1] + side * 0.12 * tangent[1],
                 ]
             )
-    xy_candidates.append(first_app_position[:2])
+    if robot not in {"R1", "R2"}:
+        xy_candidates.append(list(first_app_position[:2]))
     heights = (
-        PREFERRED_TRANSIT_Z,
-        PREFERRED_TRANSIT_Z + 0.05,
-        MIN_TRANSIT_Z,
+        (R6_STOW_Z, PREFERRED_TRANSIT_Z, MIN_TRANSIT_Z)
+        if robot == "R6"
+        else (PREFERRED_TRANSIT_Z, PREFERRED_TRANSIT_Z + 0.05, MIN_TRANSIT_Z)
     )
     return [[xy[0], xy[1], z] for xy in xy_candidates for z in heights]
 
@@ -2563,21 +2896,96 @@ def r4_fixed_down_action(
     }
 
 
-def plan_action(
+def planning_product_state(robot: str, stem: str) -> tuple[str, list[str]]:
+    order = list(PLACE_PART.values())
+    current = PICK_PART.get((robot, stem)) or PLACE_PART.get((robot, stem))
+    installed = order[:order.index(current)] if current else order
+    station = ('wb1_micro' if robot == 'R3' and stem.endswith('_B') else
+               'wb1' if robot in {'R1','R2','R3'} else
+               'wb2' if robot in {'R4','R5'} else
+               'wb2_micro' if robot == 'R6' and not stem.startswith('COM5') else 'staging')
+    return station, installed
+
+
+def plan_action(scene: Scene, robot: str, stem: str, *args, **kwargs) -> dict[str, object]:
+    """Plan against the actual already-installed product at this process step."""
+    station, installed = planning_product_state(robot, stem)
+    saved = {}
+    extra_pairs = []
+    finger_poses = {}
+    pallet = scene.by_alias('Indexing_Pallet_1')
+    pallet_pose = scene.sim.getObjectPosition(pallet, -1)
+    try:
+        pick_key = PICK_PART.get((robot,stem))
+        if pick_key is not None and robot in {'R1','R3','R4','R6'}:
+            tool = scene.tool_roots[robot]
+            gap = part_gripper_gap(robot,pick_key)+0.012
+            half = (gap+GRIPPER_FINGER_THICKNESSES.get(robot,0.020))/2
+            for side, sign in [('left',1),('right',-1)]:
+                finger = unique_alias(scene.sim,scene.roots[robot],f'{robot}T_{side}_finger_link')
+                pos = list(scene.sim.getObjectPosition(finger,tool))
+                finger_poses[finger]=(tool,pos)
+                scene.sim.setObjectPosition(finger,tool,[pos[0],sign*half,pos[2]])
+        for key in installed:
+            h = scene.by_alias(PARTS[key][0])
+            saved[h] = scene.sim.getObjectMatrix(h, -1)
+            matrix = list(scene.sim.getObjectMatrix(scene.by_alias(PARTS[key][1]), -1))
+            for i in range(3):
+                matrix[3+4*i] += STATIONS[station][i]-REFERENCE_CENTER[i]
+            scene.sim.setObjectMatrix(h, -1, matrix)
+        scene.sim.setObjectPosition(pallet, -1, [*STATIONS[station][:2], pallet_pose[2]])
+        if kwargs.get('moving_exclusions'):
+            contacts = carried_contact_handles(scene, robot, stem)
+            for carried in kwargs['moving_exclusions']:
+                extra_pairs.append(scene.create_carried_object_collision_pair(
+                    robot, carried, contacts+list(saved)))
+            kwargs['contact_additional_pairs'] = extra_pairs
+        return _plan_action(scene, robot, stem, *args, **kwargs)
+    finally:
+        for pair in extra_pairs:
+            scene.destroy_collision_pair(pair)
+        for h, matrix in saved.items():
+            scene.sim.setObjectMatrix(h, -1, matrix)
+        for h, (parent,pos) in finger_poses.items():
+            scene.sim.setObjectPosition(h,parent,pos)
+        scene.sim.setObjectPosition(pallet, -1, pallet_pose)
+
+
+def _plan_action(
     scene: Scene,
     robot: str,
     stem: str,
     stow: list[float],
     stow_position: list[float],
     legacy_keyframes: list[list[float]] | None = None,
+    transit_additional_pairs: Iterable[tuple[int, int]] = (),
+    contact_additional_pairs: Iterable[tuple[int, int]] = (),
+    moving_exclusions: Iterable[int] = (),
 ) -> dict[str, object]:
     sim = scene.sim
     app_handle = int(sim.getObject(POINTS[f"{robot}_{stem}_APP"]))
     tcp_handle = int(sim.getObject(POINTS[f"{robot}_{stem}_TCP"]))
     app_position = [float(v) for v in sim.getObjectPosition(app_handle, -1)]
     tcp_position = [float(v) for v in sim.getObjectPosition(tcp_handle, -1)]
+    target_quaternion = [
+        float(v) for v in sim.getObjectQuaternion(app_handle, -1)
+    ]
+    tcp_quaternion = [
+        float(v) for v in sim.getObjectQuaternion(tcp_handle, -1)
+    ]
+    orientation_dot = abs(sum(
+        left * right for left, right in zip(target_quaternion, tcp_quaternion)
+    ))
+    if orientation_dot < 0.999:
+        raise RuntimeError(f"{robot}_{stem} APP/TCP orientations do not match")
+    tool_axis_z = rotate_vector(target_quaternion, [0.0, 0.0, 1.0])[2]
+    if tool_axis_z > -math.cos(MAX_DOWN_TILT):
+        raise RuntimeError(f"{robot}_{stem} target tool axis is not vertical-down")
     transit_exclusions, contact_exclusions = action_exclusions(scene, robot, stem)
-    if robot == "R1" and stem == "WB1_PLACE":
+    transit_pairs = list(transit_additional_pairs)
+    contact_pairs = list(contact_additional_pairs)
+    payload_exclusions = list(moving_exclusions)
+    if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R1" and stem == "WB1_PLACE":
         return r1_loaded_place_action(
             scene,
             stow,
@@ -2586,7 +2994,7 @@ def plan_action(
             transit_exclusions,
             contact_exclusions,
         )
-    if robot == "R4" and stem in R4_TRANSFER_ENDPOINTS:
+    if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R4" and stem in R4_TRANSFER_ENDPOINTS:
         return r4_fixed_down_action(
             scene,
             stem,
@@ -2596,36 +3004,38 @@ def plan_action(
             transit_exclusions,
             contact_exclusions,
         )
-    if robot in {"R6", "R8"}:
-        corridor = search_fixed_corridor(
-            scene, robot, stem, stow, tcp_position, app_position,
-            transit_exclusions, contact_exclusions,
-        )
-        if corridor is not None:
-            print(
-                f"[corridor] {robot}_{stem} fixed four-pose corridor",
-                flush=True,
-            )
-            return _fixed_corridor_action(
-                scene, robot, stem, stow, corridor,
-                app_position, tcp_position,
-                transit_exclusions, contact_exclusions,
-            )
     # Cross-station motion is never allowed to cut through the low work
     # zone.  The only descent below this corridor is the local APP -> TCP
     # contact leg, where the destination fixture is narrowly excluded.
-    preferred_z = min(
-        MAX_TRANSIT_Z,
-        max(PREFERRED_TRANSIT_Z, app_position[2]),
+    default_workspace = (
+        "public_workspace_1" if robot in {"R1", "R2", "R3"}
+        else "public_workspace_2" if robot in {"R4", "R5", "R6"}
+        else "public_workspace_3"
     )
-    safe_z_candidates = []
-    candidate_z = preferred_z
-    while candidate_z >= max(MIN_TRANSIT_Z, app_position[2]) - 1e-9:
-        safe_z_candidates.append(round(candidate_z, 6))
-        candidate_z -= 0.02
-    minimum_reachable_z = max(MIN_TRANSIT_Z, app_position[2])
-    if not safe_z_candidates or safe_z_candidates[-1] > minimum_reachable_z + 1e-6:
-        safe_z_candidates.append(minimum_reachable_z)
+    workspace = action_workspace(robot, stem) or default_workspace
+    preferred_z = max(
+        preferred_workspace_height(MOTION_POLICY, workspace),
+        app_position[2],
+    )
+    if robot == "R6" and stem == "COM5_PLACE":
+        # With R6's conveyor-clear base pose, the strict tool-down workspace
+        # ends just above 0.50 m at the STAGING target.  A 0.48 m horizontal
+        # transfer remains above the 0.44 m global floor and preserves the
+        # canonical high-translate / vertical APP-to-TCP descent.
+        preferred_z = max(R6_COM5_TRANSIT_Z, app_position[2])
+    if robot == "R8" and stem == "DOOR_PLACE":
+        # R8 already holds the door at a collision-checked 0.50 m PARK.  A
+        # preliminary lift at that same source XY drives the down-facing arm
+        # toward its vertical reach limit and degrades visible-TCP accuracy.
+        # Translate at the existing 0.50 m clear height, then descend above
+        # the hinge APP; later fallbacks may still raise in 50 mm increments.
+        preferred_z = max(R8_DOOR_TRANSIT_Z, app_position[2])
+    safe_z_candidates = safe_height_candidates(
+        preferred_z,
+        max(MIN_TRANSIT_Z, app_position[2]),
+        MAX_TRANSIT_Z,
+        SAFE_Z_INCREMENT,
+    )
 
     legacy_app: list[float] | None = None
     legacy_tcp: list[float] | None = None
@@ -2665,7 +3075,9 @@ def plan_action(
         if app_error <= 0.004 and tcp_error <= 0.004:
             try:
                 validated_joint_line(
-                    scene, robot, legacy_app, legacy_app, transit_exclusions
+                    scene, robot, legacy_app, legacy_app, transit_exclusions,
+                    additional_pairs=transit_pairs,
+                    moving_exclusions=payload_exclusions,
                 )
                 if robot == "R2":
                     endpoint_approach = cartesian_down_line(
@@ -2676,10 +3088,15 @@ def plan_action(
                         tcp_position,
                         contact_exclusions,
                         position_tolerance=R2_ENDPOINT_POSITION_TOLERANCE,
+                        fixed_quaternion=target_quaternion,
+                        additional_pairs=contact_pairs,
+                        moving_exclusions=payload_exclusions,
                     )
                 else:
                     endpoint_approach = validated_joint_line(
-                        scene, robot, legacy_app, legacy_tcp, contact_exclusions
+                        scene, robot, legacy_app, legacy_tcp, contact_exclusions,
+                        additional_pairs=contact_pairs,
+                        moving_exclusions=payload_exclusions,
                     )
                 endpoint_app = legacy_app
                 endpoint_source = "validated existing endpoint"
@@ -2696,6 +3113,7 @@ def plan_action(
                 transit_exclusions,
                 attempts=32,
                 max_solutions=6,
+                fixed_quaternion=target_quaternion,
             )
             for candidate in app_solutions:
                 try:
@@ -2706,6 +3124,9 @@ def plan_action(
                         app_position,
                         tcp_position,
                         contact_exclusions,
+                        fixed_quaternion=target_quaternion,
+                        additional_pairs=contact_pairs,
+                        moving_exclusions=payload_exclusions,
                     )
                     endpoint_app = candidate
                     endpoint_approach = approach
@@ -2715,7 +3136,7 @@ def plan_action(
                     endpoint_errors.append(str(exc))
                     scene.set_joints(robot, stow)
             if endpoint_app is None or endpoint_approach is None:
-                if robot in {"R6", "R8"}:
+                if robot in {"R6", "R8"} and not transit_pairs:
                     corridor = search_fixed_corridor(
                         scene, robot, stem, stow, tcp_position, app_position,
                         transit_exclusions, contact_exclusions,
@@ -2756,12 +3177,17 @@ def plan_action(
                     if robot == "R2"
                     else IK_POSITION_TOLERANCE
                 ),
+                fixed_quaternion=target_quaternion,
+                additional_pairs=contact_pairs,
+                moving_exclusions=payload_exclusions,
             )
         except RuntimeError:
             if endpoint_app is None or endpoint_approach is None:
                 raise
             app_snap = validated_joint_line(
-                scene, robot, app_config, endpoint_app, transit_exclusions
+                scene, robot, app_config, endpoint_app, transit_exclusions,
+                additional_pairs=transit_pairs,
+                moving_exclusions=payload_exclusions,
             )
             transit.extend(app_snap[1:])
             app_config = endpoint_app
@@ -2804,14 +3230,13 @@ def plan_action(
                 ),
                 "resolved_endpoint_branch": resolved_endpoint_used,
                 "endpoint_source": selected_endpoint_source,
+                "carried_workpiece_checked": bool(transit_pairs),
                 "rule": "high corridor; descent only on APP-to-TCP contact leg",
             },
         }
 
     errors = []
-    cross_station_distance = math.dist(stow_position[:2], app_position[:2])
-
-    if robot == "R1":
+    if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R1":
         try:
             if stem == "SHELL_PICK":
                 if math.dist(stow_position, app_position) > TRANSIT_POSITION_TOLERANCE:
@@ -2851,7 +3276,46 @@ def plan_action(
             errors.append(str(exc))
             scene.set_joints(robot, stow)
 
-    if robot == "R2":
+    if robot == "R8" and stem == "DOOR_PICK":
+        if math.dist(stow_position, app_position) > TRANSIT_POSITION_TOLERANCE:
+            raise RuntimeError("R8 vacuum carry stow no longer matches pick APP")
+        return finish_transit(
+            [list(stow)],
+            app_position[2],
+            "R8 vertical vacuum pick",
+        )
+
+    if robot == "R8" and stem == "DOOR_PLACE":
+        safe_z = R8_DOOR_TRANSIT_Z
+        try:
+            scene.set_joints(robot, stow)
+            transit = cartesian_down_route(
+                scene,
+                robot,
+                stow,
+                stow_position,
+                [
+                    [stow_position[0], stow_position[1], safe_z],
+                    list(R8_DOOR_CLEARANCE_WAYPOINT),
+                    [app_position[0], app_position[1], safe_z],
+                    app_position,
+                ],
+                transit_exclusions,
+                fixed_quaternion=target_quaternion,
+                additional_pairs=transit_pairs,
+                moving_exclusions=payload_exclusions,
+            )
+            return finish_transit(
+                transit,
+                safe_z,
+                "R8 one-waypoint base-clear vertical Pi corridor",
+            )
+        except RuntimeError as exc:
+            print(f"[corridor reject] R8_DOOR_PLACE base-clear: {exc}", flush=True)
+            errors.append(str(exc))
+            scene.set_joints(robot, stow)
+
+    if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R2":
         try:
             if stem == "RAIL_PICK_H":
                 if math.dist(stow_position, app_position) > TRANSIT_POSITION_TOLERANCE:
@@ -2891,7 +3355,7 @@ def plan_action(
             errors.append(str(exc))
             scene.set_joints(robot, stow)
 
-    if robot == "R3" and stem in R3_FIXED_CORRIDORS:
+    if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R3" and stem in R3_FIXED_CORRIDORS:
         if stem in {"WB1_PICK", "HANDOFF_PLACE"}:
             assembly_shell = scene.by_alias("Shell_1")
             if stem == "HANDOFF_PLACE":
@@ -2911,89 +3375,131 @@ def plan_action(
             contact_exclusions,
         )
 
-    for safe_z in safe_z_candidates:
-        # Long transfers use a constrained joint-space planner between two
-        # verified high poses.  This avoids incremental IK drift across a
-        # metre-scale horizontal span while retaining tilt and height gates.
-        if (
-            cross_station_distance > 0.25
-            and endpoint_app is not None
-        ):
+    # If source/PARK and target use different down-facing yaw/tilt families,
+    # do not force the target orientation into the initial vertical lift.
+    # Lift with the source orientation, change branch only at safe height,
+    # then translate and descend with the target orientation.  This implements
+    # the policy's "yaw change at safe height only" rule and avoids the large
+    # visible-TCP residual caused by asking Cartesian IK to rotate and lift in
+    # the same first sample.
+    scene.set_joints(robot, stow)
+    source_quaternion = [
+        float(value)
+        for value in sim.getObjectQuaternion(scene.down_tips[robot], -1)
+    ]
+    orientation_dot = abs(sum(
+        left * right
+        for left, right in zip(source_quaternion, target_quaternion)
+    ))
+    if orientation_dot < 0.999:
+        for safe_z in safe_z_candidates:
+            source_high = [stow_position[0], stow_position[1], safe_z]
+            target_high = [app_position[0], app_position[1], safe_z]
             try:
-                overhead_position = [app_position[0], app_position[1], safe_z]
-                overhead = ik_candidates(
+                scene.set_joints(robot, stow)
+                lift = cartesian_down_route(
                     scene,
                     robot,
-                    overhead_position,
-                    endpoint_app,
+                    stow,
+                    stow_position,
+                    [source_high],
                     transit_exclusions,
-                    attempts=8,
-                    max_solutions=1,
+                    fixed_quaternion=source_quaternion,
+                    additional_pairs=transit_pairs,
+                    moving_exclusions=payload_exclusions,
                 )
-                if not overhead:
-                    raise RuntimeError(f"no overhead IK at z={safe_z:.3f}")
-                try:
-                    high_path = validated_joint_line(
-                        scene,
-                        robot,
-                        stow,
-                        overhead[0],
-                        transit_exclusions,
-                        max_tilt=MAX_TRANSFER_TILT,
-                        min_tip_z=MIN_TRANSIT_Z,
-                        include_other_robots=False,
-                    )
-                    high_method = "deterministic high joint corridor"
-                except RuntimeError as exc:
-                    # A joint interpolation can make the TCP dip even when
-                    # both endpoints are high.  Fall through to the explicit
-                    # Cartesian up-across-down corridor below; do not invoke
-                    # a random OMPL fallback that relaxes the down pose.
-                    errors.append(str(exc))
-                    scene.set_joints(robot, stow)
-                else:
-                    descent = cartesian_down_line(
-                        scene,
-                        robot,
-                        overhead[0],
-                        overhead_position,
-                        app_position,
-                        transit_exclusions,
-                        position_tolerance=TRANSIT_POSITION_TOLERANCE,
-                    )
-                    return finish_transit(
-                        high_path + descent[1:], safe_z, high_method
-                    )
+                rotated_solutions = ik_candidates(
+                    scene,
+                    robot,
+                    source_high,
+                    lift[-1],
+                    transit_exclusions,
+                    attempts=32,
+                    max_solutions=6,
+                    fixed_quaternion=target_quaternion,
+                )
+                for rotated in rotated_solutions:
+                    try:
+                        rotation = validated_joint_line(
+                            scene,
+                            robot,
+                            lift[-1],
+                            rotated,
+                            transit_exclusions,
+                            max_tilt=MAX_TRANSFER_TILT,
+                            min_tip_z=safe_z - 0.005,
+                            include_other_robots=True,
+                            additional_pairs=transit_pairs,
+                            moving_exclusions=payload_exclusions,
+                        )
+                        target_route = cartesian_down_route(
+                            scene,
+                            robot,
+                            rotated,
+                            source_high,
+                            [target_high, app_position],
+                            transit_exclusions,
+                            fixed_quaternion=target_quaternion,
+                            additional_pairs=transit_pairs,
+                            moving_exclusions=payload_exclusions,
+                        )
+                        transit = (
+                            lift + rotation[1:] + target_route[1:]
+                        )
+                        return finish_transit(
+                            transit,
+                            safe_z,
+                            "vertical Pi with safe-height orientation change",
+                        )
+                    except RuntimeError as exc:
+                        errors.append(str(exc))
+                        scene.set_joints(robot, stow)
             except RuntimeError as exc:
                 errors.append(str(exc))
                 scene.set_joints(robot, stow)
 
+    # Fallback level 1/2: the canonical vertical Pi path.  Try the preferred
+    # height first, then raise it in 50 mm increments.  Cartesian sampling
+    # freezes the down-facing quaternion, so neither roll nor pitch can drift.
+    for safe_z in safe_z_candidates:
+        try:
+            scene.set_joints(robot, stow)
+            transit = cartesian_down_route(
+                scene,
+                robot,
+                stow,
+                stow_position,
+                [
+                    [stow_position[0], stow_position[1], safe_z],
+                    [app_position[0], app_position[1], safe_z],
+                    app_position,
+                ],
+                transit_exclusions,
+                fixed_quaternion=target_quaternion,
+                additional_pairs=transit_pairs,
+                moving_exclusions=payload_exclusions,
+            )
+            return finish_transit(
+                transit, safe_z, "direct vertical Pi corridor"
+            )
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            if robot == "R8" and stem == "DOOR_PLACE":
+                print(
+                    f"[corridor reject] R8_DOOR_PLACE direct z={safe_z:.2f}: {exc}",
+                    flush=True,
+                )
+            scene.set_joints(robot, stow)
+
+    # Fallback level 3: retain the same high/vertical structure and add only
+    # one lateral waypoint.  Extra low-level weaving is deliberately banned.
+    for safe_z in safe_z_candidates:
         midpoint = [
             (stow_position[0] + app_position[0]) / 2.0,
             (stow_position[1] + app_position[1]) / 2.0,
             safe_z,
         ]
-        route_candidates: list[tuple[str, list[list[float]]]] = []
-        route_candidates.append((
-            "Cartesian high corridor",
-            [
-                [stow_position[0], stow_position[1], safe_z],
-                [app_position[0], app_position[1], safe_z],
-                app_position,
-            ],
-        ))
-        if cross_station_distance <= 0.25:
-            for dx, dy in ((0.16, 0.0), (-0.16, 0.0), (0.0, 0.16), (0.0, -0.16)):
-                route_candidates.append((
-                    "Cartesian offset high corridor",
-                    [
-                        [stow_position[0], stow_position[1], safe_z],
-                        [midpoint[0] + dx, midpoint[1] + dy, safe_z],
-                        [app_position[0], app_position[1], safe_z],
-                        app_position,
-                    ],
-                ))
-        for route_method, waypoints in route_candidates:
+        for dx, dy in ((0.16, 0.0), (-0.16, 0.0), (0.0, 0.16), (0.0, -0.16)):
             try:
                 scene.set_joints(robot, stow)
                 transit = cartesian_down_route(
@@ -3001,15 +3507,65 @@ def plan_action(
                     robot,
                     stow,
                     stow_position,
-                    waypoints,
+                    [
+                        [stow_position[0], stow_position[1], safe_z],
+                        [midpoint[0] + dx, midpoint[1] + dy, safe_z],
+                        [app_position[0], app_position[1], safe_z],
+                        app_position,
+                    ],
                     transit_exclusions,
+                    fixed_quaternion=target_quaternion,
+                    additional_pairs=transit_pairs,
+                    moving_exclusions=payload_exclusions,
                 )
-                return finish_transit(transit, safe_z, route_method)
+                return finish_transit(
+                    transit, safe_z, "one-side-waypoint vertical Pi corridor"
+                )
             except RuntimeError as exc:
                 errors.append(str(exc))
                 scene.set_joints(robot, stow)
-    detail = " | ".join(errors[-8:]) if errors else "no collision-free down-facing route"
-    if robot in {"R6", "R8"}:
+
+    # Fallback level 4: try alternate down-facing IK branches at the overhead
+    # target.  The connecting joint line must still pass the strict height,
+    # collision and six-degree tilt gates, including all other robots.
+    if endpoint_app is not None:
+        for safe_z in safe_z_candidates:
+            overhead_position = [app_position[0], app_position[1], safe_z]
+            overhead_solutions = ik_candidates(
+                scene, robot, overhead_position, endpoint_app,
+                transit_exclusions, attempts=32, max_solutions=6,
+                fixed_quaternion=target_quaternion,
+            )
+            for overhead in overhead_solutions:
+                try:
+                    scene.set_joints(robot, stow)
+                    high_path = validated_joint_line(
+                        scene, robot, stow, overhead, transit_exclusions,
+                        max_tilt=MAX_TRANSFER_TILT,
+                        min_tip_z=MIN_TRANSIT_Z,
+                        include_other_robots=True,
+                        additional_pairs=transit_pairs,
+                        moving_exclusions=payload_exclusions,
+                    )
+                    descent = cartesian_down_line(
+                        scene, robot, overhead, overhead_position, app_position,
+                        transit_exclusions,
+                        position_tolerance=TRANSIT_POSITION_TOLERANCE,
+                        fixed_quaternion=target_quaternion,
+                        additional_pairs=transit_pairs,
+                        moving_exclusions=payload_exclusions,
+                    )
+                    return finish_transit(
+                        high_path + descent[1:], safe_z,
+                        "alternate-IK high corridor",
+                    )
+                except RuntimeError as exc:
+                    errors.append(str(exc))
+                    scene.set_joints(robot, stow)
+
+    # Robot-specific fixed branches are also alternate-IK corridors and are
+    # considered only after the generic Pi templates have failed.
+    if robot in {"R6", "R8"} and not transit_pairs:
         corridor = search_fixed_corridor(
             scene, robot, stem, stow, tcp_position, app_position,
             transit_exclusions, contact_exclusions,
@@ -3024,20 +3580,137 @@ def plan_action(
                 app_position, tcp_position,
                 transit_exclusions, contact_exclusions,
             )
+    # Fallback level 5 and last resort: constrained OMPL reaches only a high
+    # overhead pose.  APP/TCP descent remains deterministic and vertical.
+    if endpoint_app is not None:
+        for safe_z in safe_z_candidates:
+            overhead_position = [app_position[0], app_position[1], safe_z]
+            overhead_solutions = ik_candidates(
+                scene, robot, overhead_position, endpoint_app,
+                transit_exclusions, attempts=16, max_solutions=3,
+                fixed_quaternion=target_quaternion,
+            )
+            for overhead in overhead_solutions:
+                try:
+                    scene.set_joints(robot, stow)
+                    high_path = scene.ompl_path(
+                        robot, stow, overhead, transit_exclusions,
+                        max_tilt=MAX_TRANSFER_TILT,
+                        min_tip_z=MIN_TRANSIT_Z,
+                        include_other_robots=True,
+                        additional_pairs=transit_pairs,
+                        moving_exclusions=payload_exclusions,
+                        max_time=6.0,
+                    )
+                    high_path = validated_joint_path(
+                        scene, robot, densify_path([stow, *high_path, overhead]),
+                        transit_exclusions,
+                        max_tilt=MAX_TRANSFER_TILT,
+                        min_tip_z=MIN_TRANSIT_Z,
+                        include_other_robots=True,
+                        additional_pairs=transit_pairs,
+                        moving_exclusions=payload_exclusions,
+                    )
+                    descent = cartesian_down_line(
+                        scene, robot, overhead, overhead_position, app_position,
+                        transit_exclusions,
+                        position_tolerance=TRANSIT_POSITION_TOLERANCE,
+                        fixed_quaternion=target_quaternion,
+                        additional_pairs=transit_pairs,
+                        moving_exclusions=payload_exclusions,
+                    )
+                    return finish_transit(
+                        high_path + descent[1:], safe_z,
+                        "constrained OMPL final fallback",
+                    )
+                except RuntimeError as exc:
+                    errors.append(str(exc))
+                    scene.set_joints(robot, stow)
+    detail = " | ".join(errors[-8:]) if errors else "no collision-free down-facing route"
     raise RuntimeError(f"unable to plan {robot}_{stem}: {detail}")
 
 
-def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) -> dict:
+def partial_plan_path(plan_path: Path) -> Path:
+    return plan_path.with_name(f"{plan_path.stem}.partial{plan_path.suffix}")
+
+
+def reset_checkpoint_robots(checkpoint: dict, robots: set[str]) -> None:
+    """Invalidate only selected robot data in an incremental checkpoint."""
+    for key in ("stow", "stow_positions", "actions"):
+        values = checkpoint.get(key)
+        if not isinstance(values, dict):
+            continue
+        for robot in robots:
+            values.pop(robot, None)
+
+
+def retain_checkpoint_action_prefix(checkpoint: dict, robots: Iterable[str]) -> None:
+    """Drop actions after an audited robot prefix before scene adoption."""
+    retained = set(robots)
+    actions = checkpoint.get("actions")
+    if not isinstance(actions, dict):
+        return
+    checkpoint["actions"] = {
+        robot: robot_actions
+        for robot, robot_actions in actions.items()
+        if robot in retained
+    }
+
+
+def validate_checkpoint_stows(scene: Scene, plan: dict) -> None:
+    """Revalidate every saved PARK against the currently open scene."""
+    missing = [robot for robot in ROBOT_IDS if robot not in plan.get("stow", {})]
+    if missing:
+        raise RuntimeError(f"checkpoint is missing PARK poses: {missing}")
+    for robot in ROBOT_IDS:
+        scene.set_joints(robot, plan["stow"][robot])
+    for robot in ROBOT_IDS:
+        validated_joint_line(
+            scene,
+            robot,
+            plan["stow"][robot],
+            plan["stow"][robot],
+            [],
+            max_tilt=MAX_DOWN_TILT,
+            min_tip_z=MIN_TRANSIT_Z,
+        )
+        print(f"[stow audit] {robot} valid in current scene", flush=True)
+
+
+def capture_initial_parts(scene: Scene) -> dict[str, dict[str, object]]:
+    """Capture the reproducible source pose and parent of every workpiece."""
+    snapshot: dict[str, dict[str, object]] = {}
+    for key, (source_alias, _, parent_path) in PARTS.items():
+        handle = scene.by_alias(source_alias)
+        snapshot[key] = {
+            "matrix": [
+                float(value)
+                for value in scene.sim.getObjectMatrix(handle, -1)
+            ],
+            "parent": parent_path,
+        }
+    return snapshot
+
+
+def build_plan(
+    scene: Scene,
+    scene_path: Path,
+    plan_path: Path = DEFAULT_PLAN,
+    reuse_checkpoint: bool = True,
+    selected_robots: set[str] | None = None,
+    reset_selected_robots: set[str] | None = None,
+) -> dict:
     if int(scene.sim.getSimulationState()) != int(scene.sim.simulation_stopped):
         raise RuntimeError("stop the simulation before planning")
     # Planning must not inherit an arbitrary pose left by manual debugging.
     scene.set_all_home()
-    checkpoint_path = DEFAULT_PLAN.with_name("eight_arm_cabinet.partial.json")
+    selected_targets = planning_action_targets(selected_robots)
+    checkpoint_path = partial_plan_path(plan_path)
     checkpoint = {}
     seed_plan: dict = {}
-    if DEFAULT_PLAN.is_file():
+    if plan_path.is_file():
         try:
-            seed_plan = json.loads(DEFAULT_PLAN.read_text(encoding="utf-8"))
+            seed_plan = json.loads(plan_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             seed_plan = {}
     if reuse_checkpoint and checkpoint_path.is_file():
@@ -3045,8 +3718,11 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
         if (
             candidate.get("scene") == fingerprint(scene_path)
             and int(candidate.get("schema_version", 0)) == PLAN_SCHEMA_VERSION
+            and motion_policy_matches(candidate)
         ):
             checkpoint = candidate
+    if reset_selected_robots:
+        reset_checkpoint_robots(checkpoint, reset_selected_robots)
 
     # Raise each robot's first APP into a collision-free, down-facing stow.
     stows: dict[str, list[float]] = checkpoint.get("stow", {})
@@ -3082,7 +3758,10 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
             first_app_position = [
                 float(v) for v in scene.sim.getObjectPosition(first, -1)
             ]
-            if robot == "R1":
+            first_app_quaternion = [
+                float(v) for v in scene.sim.getObjectQuaternion(first, -1)
+            ]
+            if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R1":
                 scene.set_joints(robot, R1_EDGE_STOW_JOINTS)
                 actual_position = [
                     float(value)
@@ -3103,7 +3782,7 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                 stow_positions[robot] = list(R1_EDGE_STOW_POSITION)
                 print(f"[stow] {robot} verified edge-grip carry posture", flush=True)
                 continue
-            if robot == "R2":
+            if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R2":
                 scene.set_joints(robot, R2_RAIL_STOW_JOINTS)
                 actual_position = [
                     float(value)
@@ -3124,7 +3803,7 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                 stow_positions[robot] = list(R2_RAIL_STOW_POSITION)
                 print(f"[stow] {robot} verified rail-end carry posture", flush=True)
                 continue
-            if robot == "R3":
+            if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R3":
                 scene.set_joints(robot, R3_RAIL_STOW_JOINTS)
                 actual_position = [
                     float(value)
@@ -3145,7 +3824,7 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                 stow_positions[robot] = list(R3_RAIL_STOW_POSITION)
                 print(f"[stow] {robot} verified open-rack carry posture", flush=True)
                 continue
-            if robot == "R4":
+            if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R4":
                 r4_stow = list(R4_TRANSFER_ENDPOINTS["HANDOFF_PICK"]["app"])
                 scene.set_joints(robot, r4_stow)
                 actual_position = [
@@ -3167,7 +3846,7 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                 stow_positions[robot] = list(R4_STOW_POSITION)
                 print(f"[stow] {robot} verified handoff APP carry posture", flush=True)
                 continue
-            if robot == "R5":
+            if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R5":
                 scene.set_joints(robot, R5_DEVICE_STOW_JOINTS)
                 actual_position = [
                     float(value)
@@ -3188,7 +3867,7 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                 stow_positions[robot] = list(R5_DEVICE_STOW_POSITION)
                 print(f"[stow] {robot} verified east-approach vacuum posture", flush=True)
                 continue
-            if robot == "R7":
+            if LEGACY_SPECIAL_CORRIDORS_ENABLED and robot == "R7":
                 scene.set_joints(robot, R7_SCREW_STOW_JOINTS)
                 actual_position = [
                     float(value)
@@ -3199,6 +3878,28 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                 stows[robot] = list(R7_SCREW_STOW_JOINTS)
                 stow_positions[robot] = list(R7_SCREW_STOW_POSITION)
                 print(f"[stow] {robot} verified screw-app posture", flush=True)
+                continue
+            if robot == "R8":
+                candidates = ik_candidates(
+                    scene, robot, first_app_position, R8_DOOR_STOW_JOINTS,
+                    action_exclusions(scene, robot, stems[0])[0],
+                    attempts=48, max_solutions=4, fixed_quaternion=first_app_quaternion,
+                )
+                if not candidates:
+                    raise RuntimeError('R8 has no valid front-up door source APP')
+                door_stow = min(candidates, key=lambda q: config_distance(q, R8_DOOR_STOW_JOINTS))
+                validated_joint_line(
+                    scene,
+                    robot,
+                    door_stow,
+                    door_stow,
+                    action_exclusions(scene, robot, stems[0])[0],
+                    max_tilt=MAX_DOWN_TILT,
+                    min_tip_z=first_app_position[2] - 0.005,
+                )
+                stows[robot] = list(door_stow)
+                stow_positions[robot] = list(first_app_position)
+                print(f"[stow] {robot} verified door-vacuum carry posture", flush=True)
                 continue
             seed = list(HOME)
             if int(seed_plan.get("schema_version", 0)) == 1:
@@ -3219,6 +3920,7 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                     seed,
                     attempts=32,
                     max_solutions=1,
+                    fixed_quaternion=first_app_quaternion,
                 )
                 if solutions:
                     chosen_position = position
@@ -3238,29 +3940,76 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
     for robot in ROBOT_IDS:
         scene.set_joints(robot, stows[robot])
     actions: dict[str, dict[str, dict[str, object]]] = checkpoint.get("actions", {})
+    # A partial checkpoint is executable for its completed process prefix, so
+    # it must carry the same deterministic product-reset snapshot as a full
+    # plan.  Capturing it before action planning also makes interrupted runs
+    # auditable without reconstructing part parents by hand.
+    initial_parts = capture_initial_parts(scene)
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     checkpoint_path.write_text(
         json.dumps(
             {
                 "schema_version": PLAN_SCHEMA_VERSION,
                 "scene": fingerprint(scene_path),
+                "motion_policy": MOTION_POLICY,
                 "stow": stows,
                 "stow_positions": stow_positions,
                 "actions": actions,
+                "initial_parts": initial_parts,
             },
             ensure_ascii=False,
             indent=2,
         ) + "\n",
         encoding="utf-8",
     )
-    total = sum(len(value) for value in ACTION_TARGETS.values())
+    total = sum(len(value) for value in selected_targets.values())
     done = 0
-    for robot, stems in ACTION_TARGETS.items():
+    for robot, stems in selected_targets.items():
         actions.setdefault(robot, {})
         for stem in stems:
             if stem not in actions[robot]:
+                # The conveyor redesign does not change the R7 screw TCPs,
+                # robot base or kinematic chain.  Reuse a legacy screw path
+                # only when both saved endpoint configurations still place
+                # the real TCP on the current APP/TCP dummies.  The complete
+                # new-scene preflight remains the geometric acceptance test.
+                legacy_action = (
+                    seed_plan.get("actions", {})
+                    .get(robot, {})
+                    .get(stem)
+                )
+                if (
+                    robot == "R7"
+                    and stem.startswith("SCREW_")
+                    and int(seed_plan.get("schema_version", 0)) == 30
+                    and isinstance(legacy_action, dict)
+                ):
+                    endpoints = legacy_action.get("endpoint_seeds", {})
+                    endpoint_match = True
+                    for suffix in ("APP", "TCP"):
+                        config = endpoints.get(suffix.lower())
+                        if not isinstance(config, list) or len(config) != 6:
+                            endpoint_match = False
+                            break
+                        scene.set_joints(robot, config)
+                        actual = scene.sim.getObjectPosition(scene.tips[robot], -1)
+                        target = int(scene.sim.getObject(POINTS[f"{robot}_{stem}_{suffix}"]))
+                        expected = scene.sim.getObjectPosition(target, -1)
+                        if math.dist(actual, expected) > IK_POSITION_TOLERANCE:
+                            endpoint_match = False
+                            break
+                    scene.set_joints(robot, stows[robot])
+                    if endpoint_match:
+                        actions[robot][stem] = legacy_action
+                        print(
+                            f"[reuse] {robot}_{stem} unchanged TCP branch; "
+                            f"pending schema-{PLAN_SCHEMA_VERSION} full preflight",
+                            flush=True,
+                        )
                 legacy_keyframes = None
-                if int(seed_plan.get("schema_version", 0)) == 1:
+                if stem in actions[robot]:
+                    pass
+                elif int(seed_plan.get("schema_version", 0)) == 1:
                     candidate_keyframes = (
                         seed_plan.get("actions", {}).get(robot, {}).get(stem)
                     )
@@ -3279,23 +4028,65 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                             endpoint_seeds["app"],
                             endpoint_seeds["tcp"],
                         ]
-                actions[robot][stem] = plan_action(
-                    scene,
-                    robot,
-                    stem,
-                    stows[robot],
-                    stow_positions[robot],
-                    legacy_keyframes=legacy_keyframes,
-                )
+                if stem not in actions[robot]:
+                    loaded_key = PLACE_PART.get((robot, stem))
+                    if loaded_key is None:
+                        actions[robot][stem] = plan_action(
+                            scene,
+                            robot,
+                            stem,
+                            stows[robot],
+                            stow_positions[robot],
+                            legacy_keyframes=legacy_keyframes,
+                        )
+                    else:
+                        pick_stem = pick_stem_for_part(robot, loaded_key)
+                        pick_action = actions[robot].get(pick_stem)
+                        if not isinstance(pick_action, dict):
+                            raise RuntimeError(
+                                f"{robot}_{stem} requires planned {pick_stem} first"
+                            )
+                        pick_config = [
+                            float(value)
+                            for value in pick_action["endpoint_seeds"]["tcp"]
+                        ]
+                        attachment = attach_part_for_loaded_planning(
+                            scene, robot, loaded_key, pick_config
+                        )
+                        strict_pair = scene.create_carried_object_collision_pair(
+                            robot, attachment[0], []
+                        )
+                        contact_handles = carried_contact_handles(scene, robot, stem)
+                        contact_pair = scene.create_carried_object_collision_pair(
+                            robot, attachment[0], contact_handles
+                        )
+                        try:
+                            actions[robot][stem] = plan_action(
+                                scene,
+                                robot,
+                                stem,
+                                stows[robot],
+                                stow_positions[robot],
+                                legacy_keyframes=legacy_keyframes,
+                                transit_additional_pairs=[strict_pair],
+                                contact_additional_pairs=[contact_pair],
+                                moving_exclusions=[attachment[0]],
+                            )
+                        finally:
+                            scene.destroy_collision_pair(strict_pair)
+                            scene.destroy_collision_pair(contact_pair)
+                            restore_part_after_loaded_planning(scene, attachment)
                 checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
                 checkpoint_path.write_text(
                     json.dumps(
                         {
                             "schema_version": PLAN_SCHEMA_VERSION,
                             "scene": fingerprint(scene_path),
+                            "motion_policy": MOTION_POLICY,
                             "stow": stows,
                             "stow_positions": stow_positions,
                             "actions": actions,
+                            "initial_parts": initial_parts,
                         },
                         ensure_ascii=False,
                         indent=2,
@@ -3304,17 +4095,11 @@ def build_plan(scene: Scene, scene_path: Path, reuse_checkpoint: bool = True) ->
                 )
             done += 1
             print(f"[plan {done:02d}/{total}] {robot}_{stem}", flush=True)
-    initial_parts = {}
-    for key, (source_alias, _, parent_path) in PARTS.items():
-        handle = scene.by_alias(source_alias)
-        initial_parts[key] = {
-            "matrix": [float(v) for v in scene.sim.getObjectMatrix(handle, -1)],
-            "parent": parent_path,
-        }
     scene.remove_planner_script()
     return {
         "schema_version": PLAN_SCHEMA_VERSION,
         "scene": {"file": str(scene_path), **fingerprint(scene_path)},
+        "motion_policy": MOTION_POLICY,
         "orientation": {
             "rule": "physical visible-flange-to-TCP axis points toward world -Z",
             "ik_constraints": "full pose on a per-tool physical-axis TCP marker",
@@ -3345,11 +4130,20 @@ def load_or_build_plan(scene: Scene, scene_path: Path, plan_path: Path, rebuild:
     if plan_path.is_file() and not rebuild:
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
         expected = {key: plan["scene"][key] for key in ("size", "sha256")}
-        if expected == current and int(plan.get("schema_version", 0)) == PLAN_SCHEMA_VERSION:
+        if (
+            expected == current
+            and int(plan.get("schema_version", 0)) == PLAN_SCHEMA_VERSION
+            and motion_policy_matches(plan)
+        ):
             print(f"[plan] using {plan_path}")
             return plan
         print("[plan] scene or planner schema changed; rebuilding fixed paths")
-    plan = build_plan(scene, scene_path, reuse_checkpoint=not rebuild)
+    plan = build_plan(
+        scene,
+        scene_path,
+        plan_path=plan_path,
+        reuse_checkpoint=not rebuild,
+    )
     plan_path.parent.mkdir(parents=True, exist_ok=True)
     plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"[plan] wrote {plan_path}")
@@ -3366,6 +4160,11 @@ class Track:
     carried_part: int | None = None
     carried_mode: str | None = None
     carried_contact_exclusions: list[int] = field(default_factory=list)
+    contact_start_frame: int | None = None
+    stem: str | None = None
+    workspace: str | None = None
+    contact_exclusions: list[int] = field(default_factory=list)
+    contact_moving_exclusions: list[int] = field(default_factory=list)
 
 
 class AssemblyRuntime:
@@ -3406,14 +4205,14 @@ class AssemblyRuntime:
         self.pallet_station = "wb1"
         self.assembly = None
 
-    def set_gripper(self, robot: str, opened: bool) -> None:
-        if robot in {"R2", "R5", "R7"}:
+    def set_gripper(self, robot: str, opened: bool, part_key: str | None = None) -> None:
+        if robot in {"R2", "R5", "R7", "R8"}:
             return
         root = self.scene.roots[robot]
         tool = unique_alias(self.sim, root, f"{robot}T")
         left = unique_alias(self.sim, root, f"{robot}T_left_finger_link")
         right = unique_alias(self.sim, root, f"{robot}T_right_finger_link")
-        gap = 0.17 if opened else GRIPPER_CLOSED_GAPS.get(robot, 0.035)
+        gap = part_gripper_gap(robot, part_key) + (0.012 if opened else 0.)
         finger_thickness = GRIPPER_FINGER_THICKNESSES.get(robot, 0.020)
         y = (gap + finger_thickness) / 2.0
         lp = list(self.sim.getObjectPosition(left, tool)); lp[1] = y
@@ -3433,6 +4232,14 @@ class AssemblyRuntime:
         matrix = list(self.sim.getObjectMatrix(self.ref_handles[key], -1))
         for index in range(3):
             matrix[3 + index * 4] += STATIONS[station][index] - REFERENCE_CENTER[index]
+        current = self.sim.getObjectMatrix(part, -1)
+        position_error = math.sqrt(sum((current[i]-matrix[i])**2 for i in (3,7,11)))
+        cosine = (sum(current[i]*matrix[i] for i in (0,1,2,4,5,6,8,9,10))-1)/2
+        angle_error = math.acos(max(-1.0,min(1.0,cosine)))
+        if position_error > 0.004 or angle_error > math.radians(2.0):
+            raise RuntimeError(
+                f'{key} release pose mismatch: {position_error*1000:.2f} mm, '
+                f'{math.degrees(angle_error):.2f} deg; refusing placement teleport')
         self.sim.setObjectParent(part, self.assembly, True)
         self.sim.setObjectMatrix(part, -1, matrix)
 
@@ -3450,7 +4257,9 @@ class AssemblyRuntime:
             raise RuntimeError(f"pallet index to {station!r} is waiting for {missing}")
         if self.assembly is None:
             raise RuntimeError("assembly root does not exist")
-        if station not in {"wb1", "wb2", "staging", "output"}:
+        if station not in {
+            "wb1", "wb1_micro", "wb2", "wb2_micro", "staging", "output"
+        }:
             raise ValueError(f"unknown indexing station: {station}")
         for robot in ROBOT_IDS:
             current = [
@@ -3465,7 +4274,13 @@ class AssemblyRuntime:
         end = [float(STATIONS[station][0]), float(STATIONS[station][1]), self.pallet_z]
         moving = int(self.sim.createCollection(0))
         environment = int(self.sim.createCollection(0))
-        self.sim.addItemToCollection(moving, self.sim.handle_tree, self.pallet, 0)
+        for shape in self.sim.getObjectsInTree(
+            self.pallet, self.sim.object_shape_type, 0
+        ):
+            if int(shape) not in self.scene.proxied_visual_shapes:
+                self.sim.addItemToCollection(
+                    moving, self.sim.handle_single, int(shape), 0
+                )
         excluded_shapes = set(self.scene.decorative_ground)
         for root in (self.pallet, self.indexing_conveyor):
             excluded_shapes.update(
@@ -3477,7 +4292,10 @@ class AssemblyRuntime:
         for shape in self.sim.getObjectsInTree(
             self.scene.cell, self.sim.object_shape_type, 0
         ):
-            if int(shape) not in excluded_shapes:
+            if (
+                int(shape) not in excluded_shapes
+                and int(shape) not in self.scene.proxied_visual_shapes
+            ):
                 self.sim.addItemToCollection(
                     environment, self.sim.handle_single, int(shape), 0
                 )
@@ -3525,7 +4343,27 @@ class AssemblyRuntime:
         self.sim.setObjectQuaternion(self.assembly, -1, [0.0, 0.0, 0.0, 1.0])
 
     def attach_part(self, key: str, robot: str) -> None:
-        self.set_gripper(robot, False)
+        # Parent attachment must follow a physical grasp, not substitute for
+        # one. Check the real CAD surfaces at the measured TCP first.
+        part_id = PARTS[key][1].removeprefix('REF_')
+        local = self.sim.getObjectPosition(self.scene.tips[robot],self.part_handles[key])
+        if robot in {'R2','R5','R8'}:
+            radius = {'R2':.007,'R5':.006,'R8':.006}[robot]
+            surface = flat_patch_height(part_id,tuple(local[:2]),radius,tolerance=.001)
+            compression = surface-local[2]
+            if not -.0005 <= compression <= .003:
+                raise RuntimeError(f'{robot} {key} not on suction/magnetic surface: compression={compression*1000:.2f} mm')
+            print(f'[grasp] {robot} {key}: surface contact {compression*1000:.2f} mm',flush=True)
+        else:
+            axis = 1 if robot=='R1' else 0
+            uv = tuple(local[i] for i in range(3) if i != axis)
+            hits = axis_intersections(triangles(part_id),uv,axis)
+            half = part_gripper_gap(robot,key)/2
+            if not (any(abs(float(h)-local[axis]-half)<.002 for h in hits)
+                    and any(abs(float(h)-local[axis]+half)<.002 for h in hits)):
+                raise RuntimeError(f'{robot} {key} jaws do not straddle real material at TCP {list(local)}')
+            print(f'[grasp] {robot} {key}: opposing material faces verified',flush=True)
+        self.set_gripper(robot, False, key)
         self.sim.setObjectParent(self.part_handles[key], self.scene.tips[robot], True)
 
     def attach_assembly(self, robot: str) -> None:
@@ -3567,7 +4405,7 @@ class AssemblyRuntime:
         # Object handles are session-local in CoppeliaSim.  Never trust the
         # handles serialized while the plan was generated; resolve the
         # intentional contact object from the current scene instead.
-        _, current_contact_exclusions = action_exclusions(
+        current_transit_exclusions, current_contact_exclusions = action_exclusions(
             self.scene, robot, stem
         )
         if (
@@ -3585,15 +4423,34 @@ class AssemblyRuntime:
             and self.assembly is not None
         ):
             current_contact_exclusions.append(self.assembly)
+        # Screwdriver contact is handled by excluding only the rotating bit
+        # subtree from the moving collection during APP<->TCP.  Keeping the
+        # pallet and assembled cabinet in the environment means every other
+        # R7 link remains collision-checked even while the bit is seated.
+        precise_screw_contact = robot == "R7" and stem.startswith("SCREW_")
+        runtime_exclusions = (
+            current_transit_exclusions
+            if precise_screw_contact
+            else current_contact_exclusions
+        )
         return Track(
-            robot,
-            frames,
-            tcp_frame,
-            list(dict.fromkeys(int(value) for value in current_contact_exclusions)),
-            app_frame,
-            carried_part,
-            carried_mode,
-            carried_contact_exclusions,
+            robot=robot,
+            frames=frames,
+            tcp_frame=tcp_frame,
+            exclusions=list(dict.fromkeys(int(value) for value in runtime_exclusions)),
+            app_frame=app_frame,
+            carried_part=carried_part,
+            carried_mode=carried_mode,
+            carried_contact_exclusions=carried_contact_exclusions,
+            contact_start_frame=None,
+            stem=stem,
+            workspace=action_workspace(robot, stem),
+            contact_exclusions=list(
+                dict.fromkeys(int(value) for value in runtime_exclusions)
+            ),
+            contact_moving_exclusions=(
+                [self.screw_spin] if precise_screw_contact else []
+            ),
         )
 
     def initial_track(self, robot: str) -> Track:
@@ -3611,6 +4468,15 @@ class AssemblyRuntime:
         simulate: bool = True,
         screw: bool = False,
     ) -> None:
+        workspace_entries = [
+            (track.robot, track.stem, track.workspace)
+            for track in tracks if track.workspace is not None
+        ]
+        if len(workspace_entries) > 1:
+            raise RuntimeError(
+                "shared-workspace interlock: only one robot may enter a "
+                f"public workspace per stage, requested={workspace_entries}"
+            )
         callbacks = callbacks or {}
         fired: set[str] = set()
         length = max(len(track.frames) for track in tracks)
@@ -3626,24 +4492,29 @@ class AssemblyRuntime:
                 moving_exclusions=moving_exclusions,
             )
             all_pairs.append(robot_pair)
+            contact_robot_pair: tuple[int, int] | None = None
+            if track.contact_moving_exclusions or (
+                track.contact_exclusions != track.exclusions
+            ):
+                contact_robot_pair = self.scene.create_collision_pair(
+                    track.robot,
+                    track.contact_exclusions,
+                    moving_exclusions=(
+                        moving_exclusions + track.contact_moving_exclusions
+                    ),
+                )
+                all_pairs.append(contact_robot_pair)
             strict_part_pair: tuple[int, int] | None = None
             contact_part_pair: tuple[int, int] | None = None
             if track.carried_part is not None:
-                # Source/destination fixtures may be intentional contacts.
-                # R4's complete-cabinet path has now been designed and
-                # audited with its own links included, so never waive those
-                # collisions.  Other robots retain their legacy waiver until
-                # their loaded paths are repaired one by one.
-                own_link_waiver = (
-                    []
-                    if track.robot == "R4"
-                    else list(self.scene.collision_shapes[track.robot])
-                )
+                # Source/destination fixtures may be intentional contacts,
+                # but robot links are never waived.  A carried part touching
+                # its own arm indicates an invalid grasp transform or path.
+                own_link_waiver: list[int] = []
                 strict_part_pair = self.scene.create_carried_object_collision_pair(
                     track.robot,
                     track.carried_part,
-                    list(track.carried_contact_exclusions)
-                    + own_link_waiver,
+                    own_link_waiver,
                 )
                 contact_part_pair = self.scene.create_carried_object_collision_pair(
                     track.robot,
@@ -3652,32 +4523,90 @@ class AssemblyRuntime:
                     + own_link_waiver,
                 )
                 all_pairs.extend([strict_part_pair, contact_part_pair])
-            collision_sets.append((track, robot_pair, strict_part_pair, contact_part_pair))
+            collision_sets.append(
+                (
+                    track, robot_pair, contact_robot_pair,
+                    strict_part_pair, contact_part_pair,
+                )
+            )
         try:
+            pair_indices = {pair: index for index, pair in enumerate(all_pairs)}
+            active_masks: list[list[int]] = []
+            for frame_index in range(length):
+                mask = [0] * len(all_pairs)
+                for (
+                    track, robot_pair, contact_robot_pair,
+                    strict_part_pair, contact_part_pair,
+                ) in collision_sets:
+                    outbound_app = 2 * track.tcp_frame - track.app_frame
+                    in_contact_leg = track.app_frame <= frame_index <= outbound_app
+                    active_robot_pair = (
+                        contact_robot_pair
+                        if contact_robot_pair is not None and in_contact_leg
+                        else robot_pair
+                    )
+                    mask[pair_indices[active_robot_pair]] = 1
+                    if strict_part_pair is None or contact_part_pair is None:
+                        continue
+                    active_part_pair: tuple[int, int] | None = None
+                    if track.carried_mode == "pick":
+                        active_part_pair = (
+                            contact_part_pair
+                            if frame_index <= outbound_app
+                            else strict_part_pair
+                        )
+                    elif track.carried_mode == "place":
+                        contact_start = (
+                            track.contact_start_frame
+                            if track.contact_start_frame is not None
+                            else track.app_frame
+                        )
+                        if frame_index < contact_start:
+                            active_part_pair = strict_part_pair
+                        elif frame_index <= track.tcp_frame:
+                            active_part_pair = contact_part_pair
+                    if active_part_pair is not None:
+                        mask[pair_indices[active_part_pair]] = 1
+                active_masks.append(mask)
+
+            if not simulate:
+                cursor = 0
+                for callback_frame in sorted({track.tcp_frame for track in tracks}):
+                    self.scene.apply_frame_batch(
+                        tracks,
+                        cursor,
+                        callback_frame + 1,
+                        all_pairs,
+                        active_masks,
+                        spin_handle=self.screw_spin if screw else -1,
+                    )
+                    for track in tracks:
+                        if track.tcp_frame == callback_frame and track.robot not in fired:
+                            callback = callbacks.get(track.robot)
+                            if callback is not None:
+                                callback()
+                            fired.add(track.robot)
+                    cursor = callback_frame + 1
+                self.scene.apply_frame_batch(
+                    tracks,
+                    cursor,
+                    length,
+                    all_pairs,
+                    active_masks,
+                    spin_handle=self.screw_spin if screw else -1,
+                )
+                return
+
             for frame_index in range(length):
                 positions = {
                     track.robot: track.frames[min(frame_index, len(track.frames) - 1)]
                     for track in tracks
                 }
                 spin = (self.screw_spin, frame_index * 0.45) if screw else None
-                active_pairs: list[tuple[int, int]] = []
-                for track, robot_pair, strict_part_pair, contact_part_pair in collision_sets:
-                    active_pairs.append(robot_pair)
-                    if strict_part_pair is None or contact_part_pair is None:
-                        continue
-                    outbound_app = 2 * track.tcp_frame - track.app_frame
-                    if track.carried_mode == "pick":
-                        if frame_index < track.tcp_frame:
-                            continue
-                        if frame_index <= outbound_app:
-                            active_pairs.append(contact_part_pair)
-                        else:
-                            active_pairs.append(strict_part_pair)
-                    elif track.carried_mode == "place":
-                        if frame_index < track.app_frame:
-                            active_pairs.append(strict_part_pair)
-                        elif frame_index <= track.tcp_frame:
-                            active_pairs.append(contact_part_pair)
+                active_pairs = [
+                    pair for pair, enabled in zip(all_pairs, active_masks[frame_index])
+                    if enabled
+                ]
                 try:
                     self.scene.apply_frame(positions, active_pairs, spin)
                 except RuntimeError as exc:
@@ -3721,8 +4650,98 @@ class AssemblyRuntime:
         self.events.clear()
         print("[preflight] full geometry and carried-workpiece sweep passed", flush=True)
 
+    def preflight_wb1(self) -> None:
+        """Replay the completed R1-R3 process from a partial checkpoint."""
+        print(
+            "[preflight] replaying WB1 R1-R3 with pallet micro-index",
+            flush=True,
+        )
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = False
+        self.events.clear()
+        self.move_to_stows(simulate=False)
+        run_wb1_process(self)
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = True
+        self.events.clear()
+        print("[preflight] WB1 carried-workpiece sweep passed", flush=True)
+
+    def preflight_r4(self) -> None:
+        """Replay the completed process prefix through all R4 tasks."""
+        print(
+            "[preflight] replaying R1-R4 through WB2 R4 installation",
+            flush=True,
+        )
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = False
+        self.events.clear()
+        self.move_to_stows(simulate=False)
+        run_through_r4_process(self)
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = True
+        self.events.clear()
+        print("[preflight] R1-R4 carried-workpiece sweep passed", flush=True)
+
+    def preflight_r5(self) -> None:
+        """Replay the completed process prefix through all R5 tasks."""
+        print(
+            "[preflight] replaying R1-R5 through WB2 R5 installation",
+            flush=True,
+        )
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = False
+        self.events.clear()
+        self.move_to_stows(simulate=False)
+        run_through_r5_process(self)
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = True
+        self.events.clear()
+        print("[preflight] R1-R5 carried-workpiece sweep passed", flush=True)
+
+    def preflight_r6(self) -> None:
+        """Replay the process prefix through R6's two shared workspaces."""
+        print(
+            "[preflight] replaying R1-R6 through WB2 and STAGING",
+            flush=True,
+        )
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = False
+        self.events.clear()
+        self.move_to_stows(simulate=False)
+        run_through_r6_process(self)
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = True
+        self.events.clear()
+        print("[preflight] R1-R6 carried-workpiece sweep passed", flush=True)
+
+    def preflight_r7(self) -> None:
+        """Replay the process prefix through all four R7 screw tasks."""
+        print(
+            "[preflight] replaying R1-R7 through STAGING screw fastening",
+            flush=True,
+        )
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = False
+        self.events.clear()
+        self.move_to_stows(simulate=False)
+        run_through_r7_process(self)
+        self.reset_product()
+        self.scene.set_all_home()
+        self.simulate = True
+        self.events.clear()
+        print("[preflight] R1-R7 precise screw-contact sweep passed", flush=True)
+
     def pick(self, robot: str, stem: str, key: str) -> tuple[Track, Callable[[], None]]:
-        self.set_gripper(robot, True)
+        self.set_gripper(robot, True, key)
         return self.track(robot, stem), lambda: self.attach_part(key, robot)
 
     def place(self, robot: str, stem: str, key: str, station: str) -> tuple[Track, Callable[[], None]]:
@@ -3733,7 +4752,7 @@ class AssemblyRuntime:
             # the following pick/transfer action opens them after the arm has
             # returned to its clear APP/stow posture.
             if not (robot == "R3" and stem in {"RAIL_PLACE_A", "RAIL_PLACE_B"}):
-                self.set_gripper(robot, True)
+                self.set_gripper(robot, True, key)
         track = self.track(robot, stem)
         if self.assembly is not None:
             # Only the carried part may contact the product on APP -> TCP.
@@ -3890,19 +4909,22 @@ def process_stages() -> list[list[tuple[str, str]]]:
         [("R1", "WB1_PLACE")], [("R2", "RAIL_PLACE_H")],
         [("R3", "RAIL_PLACE_A")], [("R3", "RAIL_PICK_B")],
         [("R3", "RAIL_PLACE_B")],
-        [("R5", "PLC_PICK"), ("R6", "SERVO_PICK")],
-        [("R5", "PLC_PLACE")],
-        [("R6", "SERVO_PLACE"), ("R5", "PSU_PICK")],
-        [("R5", "PSU_PLACE"), ("R6", "DMA_PICK")],
-        [("R6", "DMA_PLACE")],
+        [("R4", "PSU_PICK")], [("R4", "PSU_PLACE")],
+        [("R4", "SERVO_PICK")], [("R4", "SERVO_PLACE")],
+        [("R4", "EDS_PICK")], [("R4", "EDS_PLACE")],
+        [("R5", "PLC_PICK")], [("R5", "PLC_PLACE")],
+        [("R5", "DMA_PICK")], [("R5", "DMA_PLACE")],
         [("R6", "CONTACTOR_PICK")], [("R6", "CONTACTOR_PLACE")],
         [("R6", "BREAKER_PICK")], [("R6", "BREAKER_PLACE")],
+        [("R6", "COM5_PICK")], [("R6", "COM5_PLACE")],
+        [("R8", "FILTER_PICK")], [("R8", "FILTER_PLACE")],
         [("R7", "SCREW_1")], [("R7", "SCREW_2")],
         [("R7", "SCREW_3")], [("R7", "SCREW_4")],
     ]
 
 
-def run_process(runtime: AssemblyRuntime) -> None:
+def run_wb1_process(runtime: AssemblyRuntime) -> None:
+    """Execute the complete first shared-workspace process."""
     p1 = runtime.pick("R1", "SHELL_PICK", "shell")
     p2 = runtime.pick("R2", "RAIL_PICK_H", "rail_h")
     p3 = runtime.pick("R3", "RAIL_PICK_A", "rail_a")
@@ -3929,97 +4951,120 @@ def run_process(runtime: AssemblyRuntime) -> None:
         wait_for=("RAIL_H_DONE",),
         emits=("RAIL_A_DONE",),
     )
+    runtime.index_pallet(
+        "wb1_micro",
+        wait_for=("RAIL_A_DONE",),
+        emits="WB1_MICRO_INDEXED",
+    )
     runtime.execute_pair(
         [runtime.pick("R3", "RAIL_PICK_B", "rail_b")],
         "R3 vertical rail B pick",
-        wait_for=("RAIL_A_DONE",),
+        wait_for=("WB1_MICRO_INDEXED",),
         emits=("RAIL_B_HELD",),
     )
     runtime.execute_pair(
-        [runtime.place("R3", "RAIL_PLACE_B", "rail_b", "wb1")],
+        [runtime.place("R3", "RAIL_PLACE_B", "rail_b", "wb1_micro")],
         "R3 vertical rail B install",
         wait_for=("RAIL_B_HELD",),
         emits=("WB1_ASSEMBLY_DONE",),
     )
 
+
+def run_device_tasks(
+    runtime: AssemblyRuntime,
+    tasks: Iterable[tuple[str, str, str]],
+    previous_event: str,
+    station: str = "wb2",
+) -> str:
+    """Run a dependency-ordered group of WB2 device pick/place tasks."""
+    for robot, stem, key in tasks:
+        held_event = f"{stem}_HELD"
+        done_event = f"{stem}_DONE"
+        runtime.execute_pair(
+            [runtime.pick(robot, f"{stem}_PICK", key)],
+            f"{robot} {key} pick",
+            wait_for=(previous_event,),
+            emits=(held_event,),
+        )
+        runtime.execute_pair(
+            [runtime.place(robot, f"{stem}_PLACE", key, station)],
+            f"{robot} {key} install",
+            wait_for=(held_event,),
+            emits=(done_event,),
+        )
+        previous_event = done_event
+    return previous_event
+
+
+R4_WB2_TASKS = (
+    ("R4", "PSU", "psu"),
+    ("R4", "SERVO", "servo"),
+    ("R4", "EDS", "eds"),
+)
+R5_WB2_TASKS = (
+    ("R5", "PLC", "plc"),
+    ("R5", "DMA", "dma"),
+)
+R6_WB2_TASKS = (
+    ("R6", "CONTACTOR", "contactor"),
+    ("R6", "BREAKER", "breaker"),
+)
+
+
+def run_through_r4_process(runtime: AssemblyRuntime) -> str:
+    run_wb1_process(runtime)
     runtime.index_pallet(
         "wb2",
         wait_for=("WB1_ASSEMBLY_DONE",),
         emits="WB2_READY",
     )
-    entries = [
-        runtime.pick("R5", "PLC_PICK", "plc"),
-        runtime.pick("R6", "SERVO_PICK", "servo"),
-    ]
-    runtime.execute_pair(
-        entries,
-        "R5/R6 parallel device prefetch",
-        wait_for=("WB2_READY",),
-        emits=("WB2_FIRST_DEVICES_HELD",),
+    return run_device_tasks(runtime, R4_WB2_TASKS, "WB2_READY")
+
+
+def run_through_r5_process(runtime: AssemblyRuntime) -> str:
+    previous_event = run_through_r4_process(runtime)
+    return run_device_tasks(runtime, R5_WB2_TASKS, previous_event)
+
+
+def run_through_r6_process(runtime: AssemblyRuntime) -> str:
+    previous_event = run_through_r5_process(runtime)
+    runtime.index_pallet(
+        "wb2_micro",
+        wait_for=(previous_event,),
+        emits="WB2_MICRO_INDEXED",
     )
-    runtime.execute_pair(
-        [runtime.place("R5", "PLC_PLACE", "plc", "wb2")],
-        "R5 PLC install",
-        wait_for=("WB2_READY", "WB2_FIRST_DEVICES_HELD"),
-        emits=("PLC_DONE",),
+    previous_event = run_device_tasks(
+        runtime,
+        R6_WB2_TASKS,
+        "WB2_MICRO_INDEXED",
+        station="wb2_micro",
     )
-    runtime.execute_pair(
-        [
-            runtime.place("R6", "SERVO_PLACE", "servo", "wb2"),
-            runtime.pick("R5", "PSU_PICK", "psu"),
-        ],
-        "R6 servo install + R5 PSU prefetch",
-        wait_for=("PLC_DONE",),
-        emits=("SERVO_DONE", "PSU_HELD"),
-    )
-    runtime.execute_pair(
-        [
-            runtime.place("R5", "PSU_PLACE", "psu", "wb2"),
-            runtime.pick("R6", "DMA_PICK", "dma"),
-        ],
-        "R5 PSU install + R6 DMA prefetch",
-        wait_for=("SERVO_DONE", "PSU_HELD"),
-        emits=("PSU_DONE", "DMA_HELD"),
-    )
-    runtime.execute_pair(
-        [runtime.place("R6", "DMA_PLACE", "dma", "wb2")],
-        "R6 DMA install",
-        wait_for=("PSU_DONE", "DMA_HELD"),
-        emits=("DMA_DONE",),
-    )
-    previous_event = "DMA_DONE"
-    for stem, key, label in (
-        ("CONTACTOR", "contactor", "contactor"),
-        ("BREAKER", "breaker", "breaker"),
-    ):
-        held_event = f"{stem}_HELD"
-        done_event = f"{stem}_DONE"
-        runtime.execute_pair(
-            [runtime.pick("R6", f"{stem}_PICK", key)],
-            f"R6 {label} pick",
-            wait_for=(previous_event,),
-            emits=(held_event,),
-        )
-        runtime.execute_pair(
-            [runtime.place("R6", f"{stem}_PLACE", key, "wb2")],
-            f"R6 {label} install",
-            wait_for=(held_event,),
-            emits=(done_event,),
-        )
-        previous_event = done_event
     runtime.index_pallet(
         "staging",
         wait_for=(previous_event,),
         emits="STAGING_READY",
     )
 
-    previous_event = "STAGING_READY"
+    runtime.execute_pair(
+        [runtime.pick("R6", "COM5_PICK", "com5")],
+        "R6 COM5 pick",
+        wait_for=("STAGING_READY",),
+        emits=("COM5_HELD",),
+    )
+    runtime.execute_pair(
+        [runtime.place("R6", "COM5_PLACE", "com5", "staging")],
+        "R6 COM5 install",
+        wait_for=("COM5_HELD",),
+        emits=("COM5_DONE",),
+    )
+    return "COM5_DONE"
+
+
+def run_through_r7_process(runtime: AssemblyRuntime) -> str:
+    previous_event = run_through_r6_process(runtime)
+    previous_event = run_device_tasks(runtime, [("R8","FILTER","filter")], previous_event, station="staging")
     for index in range(1, 5):
         screw_track = runtime.track("R7", f"SCREW_{index}")
-        if runtime.assembly is not None:
-            # Contact between screwdriver bit and cabinet is intentional; the
-            # rest of the R7 moving chain remains checked against all fixtures.
-            screw_track.exclusions.append(runtime.assembly)
         screw_event = f"SCREW_{index}_DONE"
         runtime.execute_screw(
             screw_track,
@@ -4028,10 +5073,13 @@ def run_process(runtime: AssemblyRuntime) -> None:
             emits=screw_event,
         )
         previous_event = screw_event
+    return previous_event
+
+
+def run_process(runtime: AssemblyRuntime) -> None:
+    previous_event = run_through_r7_process(runtime)
     runtime.index_pallet(
-        "output",
-        wait_for=("SCREW_4_DONE",),
-        emits="OUTPUT_READY",
+        "output", wait_for=(previous_event,), emits="OUTPUT_READY",
     )
     runtime.events.add("CYCLE_COMPLETE")
 
@@ -4044,6 +5092,45 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--plan", type=Path, default=DEFAULT_PLAN)
     parser.add_argument("--rebuild-plan", action="store_true")
     parser.add_argument("--plan-only", action="store_true")
+    parser.add_argument(
+        "--plan-robot",
+        choices=ROBOT_IDS,
+        help=(
+            "incrementally plan only this robot into the partial checkpoint; "
+            "the other seven robots remain at their collision-checked PARK poses"
+        ),
+    )
+    parser.add_argument("--preflight-only", action="store_true")
+    parser.add_argument(
+        "--preflight-wb1",
+        action="store_true",
+        help="replay R1-R3 from a schema-compatible partial checkpoint",
+    )
+    parser.add_argument(
+        "--preflight-r4",
+        action="store_true",
+        help="replay the schema-compatible partial process through R4",
+    )
+    parser.add_argument(
+        "--preflight-r5",
+        action="store_true",
+        help="replay the schema-compatible partial process through R5",
+    )
+    parser.add_argument(
+        "--preflight-r6",
+        action="store_true",
+        help="replay the schema-compatible partial process through R6",
+    )
+    parser.add_argument(
+        "--preflight-r7",
+        action="store_true",
+        help="replay the schema-compatible partial process through R7",
+    )
+    parser.add_argument(
+        "--audit-existing-plan",
+        action="store_true",
+        help="preflight and adopt a schema-compatible plan after an intentional scene rebuild",
+    )
     parser.add_argument("--skip-preflight", action="store_true")
     parser.add_argument("--speed", type=float, default=1.0, help="0.2..3.0; larger is faster")
     return parser.parse_args()
@@ -4051,15 +5138,19 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    require_open_top_shell()
     scene_path = args.scene.expanduser().resolve()
     plan_path = args.plan.expanduser().resolve()
     client = RemoteAPIClient(args.host, args.port)
-    client.timeout = 60.0
+    # A fixed-corridor collision sweep is executed as one CoppeliaSim script
+    # call.  With the conveyor, pallet and assembled-product geometry enabled
+    # that call can legitimately exceed the remote API's 60 s default.
+    client.timeout = 900.0
     try:
         import zmq
 
-        client.socket.setsockopt(zmq.RCVTIMEO, 60000)
-        client.socket.setsockopt(zmq.SNDTIMEO, 60000)
+        client.socket.setsockopt(zmq.RCVTIMEO, 900000)
+        client.socket.setsockopt(zmq.SNDTIMEO, 900000)
         client.socket.setsockopt(zmq.LINGER, 0)
     except (ImportError, AttributeError):
         pass
@@ -4070,10 +5161,102 @@ def main() -> int:
     if int(scene.sim.getSimulationState()) != int(scene.sim.simulation_stopped):
         raise RuntimeError("the simulation must be stopped before this controller starts")
 
-    try:
-        plan = load_or_build_plan(scene, scene_path, plan_path, args.rebuild_plan)
-    finally:
-        scene.remove_planner_script()
+    if args.plan_robot:
+        if (
+            args.audit_existing_plan or args.preflight_only
+            or args.preflight_wb1 or args.preflight_r4
+            or args.preflight_r5 or args.preflight_r6 or args.preflight_r7
+        ):
+            raise RuntimeError(
+                "--plan-robot cannot be combined with preflight/audit modes"
+            )
+        try:
+            plan = build_plan(
+                scene,
+                scene_path,
+                plan_path=plan_path,
+                reuse_checkpoint=True,
+                selected_robots={args.plan_robot},
+                reset_selected_robots=(
+                    {args.plan_robot} if args.rebuild_plan else None
+                ),
+            )
+        finally:
+            scene.remove_planner_script()
+        completed = sum(len(actions) for actions in plan["actions"].values())
+        total = sum(len(stems) for stems in ACTION_TARGETS.values())
+        print(
+            f"[plan] {args.plan_robot} complete; partial checkpoint has "
+            f"{completed}/{total} actions"
+        )
+        return 0
+
+    if (
+        args.preflight_wb1 or args.preflight_r4
+        or args.preflight_r5 or args.preflight_r6 or args.preflight_r7
+    ):
+        if args.preflight_only:
+            raise RuntimeError(
+                "partial preflight cannot be combined with --preflight-only"
+            )
+        if sum(
+            (
+                args.preflight_wb1, args.preflight_r4,
+                args.preflight_r5, args.preflight_r6, args.preflight_r7,
+            )
+        ) > 1:
+            raise RuntimeError("choose only one partial preflight endpoint")
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        if int(plan.get("schema_version", 0)) != PLAN_SCHEMA_VERSION:
+            raise RuntimeError("WB1 preflight requires a schema-compatible plan")
+        if not motion_policy_matches(plan):
+            raise RuntimeError("plan motion-policy fingerprint is stale")
+        expected_scene = {
+            key: plan["scene"][key] for key in ("size", "sha256")
+        }
+        if (
+            expected_scene != fingerprint(scene_path)
+            and not args.audit_existing_plan
+        ):
+            raise RuntimeError("WB1 preflight plan is bound to a different scene")
+        if args.preflight_r7:
+            required_robots = ("R1", "R2", "R3", "R4", "R5", "R6", "R7")
+        elif args.preflight_r6:
+            required_robots = ("R1", "R2", "R3", "R4", "R5", "R6")
+        elif args.preflight_r5:
+            required_robots = ("R1", "R2", "R3", "R4", "R5")
+        elif args.preflight_r4:
+            required_robots = ("R1", "R2", "R3", "R4")
+        else:
+            required_robots = ("R1", "R2", "R3")
+        for robot in required_robots:
+            missing = set(ACTION_TARGETS[robot]) - set(plan["actions"][robot])
+            if missing:
+                raise RuntimeError(
+                    f"WB1 preflight is missing {robot} actions: {sorted(missing)}"
+                )
+        if args.audit_existing_plan:
+            validate_checkpoint_stows(scene, plan)
+        print(f"[plan] auditing partial checkpoint {plan_path}")
+    elif args.audit_existing_plan:
+        if not args.preflight_only:
+            raise RuntimeError("--audit-existing-plan requires --preflight-only")
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        if int(plan.get("schema_version", 0)) != PLAN_SCHEMA_VERSION:
+            raise RuntimeError("only a schema-compatible plan may be audited")
+        if not motion_policy_matches(plan):
+            raise RuntimeError("plan motion-policy fingerprint is stale")
+        # A visual/import-frame rebuild can intentionally change workpiece
+        # source matrices without changing any process TCP or collision proxy.
+        # Capture the live reset state now; it is persisted only if the full
+        # carried-workpiece preflight below succeeds.
+        plan["initial_parts"] = capture_initial_parts(scene)
+        print(f"[plan] auditing existing {plan_path} against rebuilt geometry")
+    else:
+        try:
+            plan = load_or_build_plan(scene, scene_path, plan_path, args.rebuild_plan)
+        finally:
+            scene.remove_planner_script()
     if args.plan_only:
         return 0
     runtime = AssemblyRuntime(scene, plan, args.speed)
@@ -4082,7 +5265,63 @@ def main() -> int:
     scene.install_batch_script()
     try:
         if not args.skip_preflight:
-            runtime.preflight()
+            if args.preflight_r7:
+                runtime.preflight_r7()
+            elif args.preflight_r6:
+                runtime.preflight_r6()
+            elif args.preflight_r5:
+                runtime.preflight_r5()
+            elif args.preflight_r4:
+                runtime.preflight_r4()
+            elif args.preflight_wb1:
+                runtime.preflight_wb1()
+            else:
+                runtime.preflight()
+        if (
+            args.preflight_wb1 or args.preflight_r4
+            or args.preflight_r5 or args.preflight_r6 or args.preflight_r7
+        ):
+            if args.audit_existing_plan:
+                retain_checkpoint_action_prefix(plan, required_robots)
+                plan["scene"] = {
+                    "file": str(scene_path),
+                    **fingerprint(scene_path),
+                }
+                plan_path.write_text(
+                    json.dumps(plan, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                print(
+                    "[plan] adopted audited process prefix and removed later stale actions",
+                    flush=True,
+                )
+            scene.remove_batch_script()
+            endpoint = (
+                "R7" if args.preflight_r7
+                else "R6" if args.preflight_r6
+                else "R5" if args.preflight_r5
+                else "R4" if args.preflight_r4
+                else "WB1 R1-R3"
+            )
+            print(f"[done] {endpoint} partial-process preflight passed")
+            return 0
+        if args.preflight_only:
+            if args.audit_existing_plan:
+                plan["scene"] = {
+                    "file": str(scene_path),
+                    **fingerprint(scene_path),
+                }
+                plan_path.write_text(
+                    json.dumps(plan, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                print("[plan] adopted rebuilt proxy geometry after full preflight")
+            scene.remove_batch_script()
+            print(
+                f"[done] schema-{PLAN_SCHEMA_VERSION} "
+                "full-process preflight passed"
+            )
+            return 0
         runtime.move_to_stows(simulate=False)
         client.setStepping(True)
         scene.sim.startSimulation()
@@ -4091,7 +5330,7 @@ def main() -> int:
         scene.sim.pauseSimulation()
         client.setStepping(False)
         scene.remove_batch_script()
-        print("[done] cabinet assembly complete; simulation is paused with the product in Finished_Bin")
+        print("[done] cabinet assembly complete; simulation is paused at the output pallet stop")
         return 0
     except Exception:
         try:

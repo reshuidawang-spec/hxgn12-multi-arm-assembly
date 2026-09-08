@@ -10,12 +10,12 @@ This script:
        cabinets, back-panel and truss stacks, old targets/baskets);
     2. imports the 14 processed cabinet parts (27 instances) via
        sim.importShape with a sim.createShape fallback;
-    3. places them: two shells on the conveyor, two top plates on the new
-       R2 plate stand, three frame rails on the enlarged R3 rack, large
-       devices in the R5 basket, small devices in the R6 basket, and a fully
-       assembled reference cabinet on the right round table;
-    4. adds the S78 staging table and the finished-product conveyor near R8;
-    5. creates the 72 process target dummies for the 8-robot assembly flow;
+    3. places them at task-owned source fixtures (R4 power/drive, R5
+       control/filter, R6 switch/communication and R8 door supply) plus a
+       fully assembled reference cabinet on an out-of-process display riser;
+    4. removes the obsolete round tables and detached robot-base discs, then
+       marks three shared workspaces along the indexing conveyor;
+    5. creates every task-owned APP/TCP pair for the 8-robot assembly flow;
     6. saves the scene.
 """
 
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import re
 import sys
@@ -34,6 +35,7 @@ sys.path.insert(0, str(REPO_ROOT))
 import numpy as np
 import yaml
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
+from sim_bridge.cabinet_geometry import flat_patch_height, top_surface_z, vacuum_grasp_point, require_open_top_shell
 
 from scripts.build_new_line_scene import (
     AREAS_PATH,
@@ -67,10 +69,12 @@ BELT_TOP_Z = 0.270
 INDEX_BELT_TOP_Z = 0.245
 PALLET_THICKNESS = 0.025
 PALLET_SIZE = (0.58, 0.38)
+WB1_MICRO_INDEX_X = 0.120
+WB2_MICRO_INDEX_X = 0.120
 APP_LIFT_Z = 0.120
 R1_EDGE_APP_LIFT_Z = 0.090
-SHELL_EDGE_GRIP_OFFSET_Y = 0.1125
-SHELL_EDGE_GRIP_DEPTH_Z = 0.020
+SHELL_EDGE_GRIP_OFFSET_Y = 0.11349
+SHELL_EDGE_GRIP_DEPTH_Z = 0.007
 R2_RAIL_GRIP_OFFSET_X = 0.140
 R2_TRANSPORT_TCP_Z = 0.500
 R2_MAGNET_DIAMETER = 0.014
@@ -88,6 +92,32 @@ R4_ASSEMBLY_GRIP_OFFSET_X = 0.200
 R4_ASSEMBLY_GRIP_DEPTH_Z = 0.020
 R4_ASSEMBLY_APP_Z = 0.480
 SCREW_LIFT_Z = 0.080
+VACUUM_COMPRESSION_Z = 0.001
+DOOR_APP_LIFT_Z = 0.150
+DOOR_VACUUM_LOCAL_X = 0.089
+DOOR_VACUUM_LOCAL_Y = -0.011
+DOOR_VACUUM_SURFACE_Z = 0.1348
+R8_VACUUM_CUP_DIAMETER = 0.050
+R8_VACUUM_CUP_THICKNESS = 0.012
+
+# A down-facing quaternion per robot.  R3/R4/R6 rotate the jaw closing
+# direction by 90 degrees.  R8's vacuum cup is yaw-symmetric, but retaining
+# its established down-facing yaw avoids unnecessary joint-branch changes.
+ROBOT_TCP_QUATERNIONS = {
+    "R1": (1.0, 0.0, 0.0, 0.0),
+    "R2": (1.0, 0.0, 0.0, 0.0),
+    "R3": (2**-0.5, 2**-0.5, 0.0, 0.0),
+    "R4": (2**-0.5, 2**-0.5, 0.0, 0.0),
+    "R5": (1.0, 0.0, 0.0, 0.0),
+    "R6": (2**-0.5, 2**-0.5, 0.0, 0.0),
+    "R7": (1.0, 0.0, 0.0, 0.0),
+    "R8": (2**-0.5, 2**-0.5, 0.0, 0.0),
+}
+TARGET_QUATERNION_OVERRIDES = {
+    # Projected from the previously verified R3-B down-facing branch.  The
+    # 12-degree yaw offset clears the west cabinet edge while retaining a
+    # vertical tool axis.
+}
 
 # ---- floor layout ----------------------------------------------------------
 FLOOR_CENTER = (-1.70, -0.40)
@@ -99,13 +129,18 @@ COLOR_FLOOR_PATH = [0.95, 0.78, 0.20]
 COLOR_FLOOR_PAD = [0.24, 0.26, 0.29]
 COLOR_FLOOR_BORDER = [0.58, 0.58, 0.58]
 
+PUBLIC_WORKSPACES = (
+    ("Public_Workspace_1", (-3.15, 0.25), (1.55, 1.50), ("R1", "R2", "R3"), [0.42, 0.52, 0.62]),
+    ("Public_Workspace_2", (-1.20, 0.25), (1.55, 1.50), ("R4", "R5", "R6"), [0.46, 0.56, 0.64]),
+    ("Public_Workspace_3", (0.05, 0.25), (1.25, 1.50), ("R6", "R7", "R8"), [0.50, 0.60, 0.66]),
+)
+
 FLOOR_ZONES = [
     ((-3.55, 1.35), (2.00, 1.20), COLOR_FLOOR_ZONE_FEED, "Floor_Zone_Conveyor"),
-    ((-3.15, 0.25), (2.30, 2.30), COLOR_FLOOR_ZONE, "Floor_Zone_WB1"),
-    ((-2.45, 0.40), (1.00, 1.00), [0.50, 0.52, 0.55], "Floor_Zone_Handoff"),
-    ((-1.20, 0.25), (2.30, 2.30), COLOR_FLOOR_ZONE, "Floor_Zone_WB2"),
-    ((0.05, 0.25), (1.10, 1.10), [0.50, 0.52, 0.55], "Floor_Zone_Staging"),
-    ((0.75, -0.10), (2.30, 2.30), COLOR_FLOOR_ZONE, "Floor_Zone_Display"),
+    *[
+        (center, size, color, f"Floor_Zone_{alias}")
+        for alias, center, size, _members, color in PUBLIC_WORKSPACES
+    ],
     ((0.62, -0.92), (2.60, 1.30), COLOR_FLOOR_ZONE_FEED, "Floor_Zone_Output"),
 ]
 ROBOT_BASE_POSITIONS = {
@@ -118,9 +153,12 @@ ROBOT_BASE_POSITIONS = {
     # the scanned (-1.30, 0.70) branch crosses the two stations in 96 frames.
     "R4": (-1.30, 0.70),
     "R5": (-1.56, -0.22),
-    "R6": (-0.60, 0.40),
-    "R7": (0.65, 0.25),
-    "R8": (0.35, -0.50),
+    # R6 and R7 previously sat inside the central conveyor footprint.  They
+    # now stand on opposite sides of shared workspace 3, leaving the complete
+    # belt/frame envelope unobstructed.
+    "R6": (-0.50, -0.08),
+    "R7": (0.10, 0.75),
+    "R8": (0.35, -0.22),
 }
 FLOW_PATH = [
     (-3.65, 1.25),
@@ -199,6 +237,9 @@ def configure_r2_magnetic_pad(sim) -> int:
     coincident with ``R2_vacuum_tip``; process targets may therefore use the
     tip as the actual magnetic contact point.
     """
+    # Remove the legacy four-cup carrier as well as its TCP marker. Keeping
+    # those cups made the nominal narrow magnet collide with the cabinet.
+    configure_compact_axial_tool(sim, 'R2', magnetic=True)
     robot = int(sim.getObject("/R2"))
     tool_tcp = -1
     stale: list[int] = []
@@ -295,35 +336,166 @@ def configure_r3_slim_rail_fingers(sim) -> int:
     return updated
 
 
-def build_wb1_table(sim) -> None:
-    """Idempotently recreate the round table removed with the workspace copy."""
-    tables_parent = _ensure_group(sim, f"{SCENE_ROOT}/Tables", "Tables")
+def configure_r8_vacuum_tool(sim) -> int:
+    """Replace R8's parallel fingers with a 50 mm door vacuum cup.
+
+    The cabinet-door STL has a broad planar face but no through-slot or
+    opposed vertical flange suitable for the original down-facing jaws.  The
+    existing tool TCP is preserved exactly; only its visible/collidable tool
+    geometry is replaced.  Local +X of this R8 TCP points back toward the
+    flange, so each cylinder is rotated from its native local-Z axis to +X
+    and its working face remains on the TCP plane.
+    """
+    robot = int(sim.getObject("/R8"))
+    tool_root = -1
+    tool_tcp = -1
+    tip = -1
+    for handle in _tree(sim, robot):
+        alias = str(sim.getObjectAlias(handle, 0))
+        if alias == "R8T":
+            tool_root = int(handle)
+        elif alias == "R8T_tool_tcp":
+            tool_tcp = int(handle)
+        elif alias in {"R8_gripper_tip", "R8_vacuum_tip"}:
+            tip = int(handle)
+    if min(tool_root, tool_tcp, tip) < 0:
+        raise RuntimeError("R8 tool/TCP/tip not found; cannot install vacuum cup")
+
+    keep = {tool_root, tool_tcp, tip}
     stale = [
-        handle
-        for handle in _tree(sim, tables_parent)
-        if handle != tables_parent
-        and str(sim.getObjectAlias(handle, 0)).startswith("WB1_")
+        int(handle)
+        for handle in _tree(sim, tool_root)
+        if int(handle) not in keep
     ]
     if stale:
         sim.removeObjects(stale)
-    _cylinder(sim, 1.9, 0.12, (*WB1_CENTER, 0.06), "WB1_Table", tables_parent, [0.62, 0.62, 0.62])
-    ring = 0.76
-    for index, (dx, dy) in enumerate(
-        ((ring, 0.0), (ring / 2**0.5, ring / 2**0.5), (0.0, ring),
-         (-ring / 2**0.5, ring / 2**0.5), (-ring, 0.0),
-         (-ring / 2**0.5, -ring / 2**0.5), (0.0, -ring),
-         (ring / 2**0.5, -ring / 2**0.5)),
-        start=1,
-    ):
-        _cuboid(sim, (0.09, 0.09, 0.06), (WB1_CENTER[0] + dx, WB1_CENTER[1] + dy, 0.03), f"WB1_Pad_{index}", tables_parent, [0.30, 0.30, 0.30])
+    sim.setObjectAlias(tip, "R8_vacuum_tip")
+
+    quarter_turn_y = [0.0, 2**-0.5, 0.0, 2**-0.5]
+    specifications = (
+        ("R8T_vacuum_shaft", 0.035, 0.280, 0.230, [0.24, 0.27, 0.31]),
+        ("R8T_vacuum_body", 0.070, 0.080, 0.050, [0.16, 0.20, 0.24]),
+        (
+            "R8T_vacuum_cup",
+            R8_VACUUM_CUP_DIAMETER,
+            R8_VACUUM_CUP_THICKNESS,
+            R8_VACUUM_CUP_THICKNESS / 2.0,
+            [0.08, 0.12, 0.16],
+        ),
+    )
+    special = (
+        sim.objectspecialproperty_collidable
+        | sim.objectspecialproperty_measurable
+        | sim.objectspecialproperty_detectable_all
+        | sim.objectspecialproperty_renderable
+    )
+    for alias, diameter, length, local_x, color in specifications:
+        shape = int(
+            sim.createPrimitiveShape(
+                sim.primitiveshape_cylinder,
+                [diameter, diameter, length],
+                0,
+            )
+        )
+        sim.setObjectAlias(shape, alias)
+        sim.setObjectParent(shape, tool_tcp, False)
+        sim.setObjectPose(shape, tool_tcp, [local_x, 0.0, 0.0, *quarter_turn_y])
+        sim.setShapeColor(
+            shape, None, sim.colorcomponent_ambient_diffuse, color
+        )
+        sim.setObjectInt32Param(shape, sim.shapeintparam_static, 1)
+        sim.setObjectInt32Param(shape, sim.shapeintparam_respondable, 0)
+        sim.setObjectSpecialProperty(shape, special)
+    return len(specifications)
+
+
+def configure_r5_vacuum_tool(sim) -> int:
+    """A single 12 mm cup fits the 25--27 mm DMA/filter housings.
+
+    The legacy 150 x 90 mm four-cup plate could not seal on these parts.
+    Keep the real TCP and its ancestor frames, replace only tool geometry.
+    """
+    return configure_compact_axial_tool(sim, 'R5')
+
+
+def configure_compact_axial_tool(sim, robot_id: str, magnetic: bool=False) -> int:
+    """Preserve TCP frames; replace oversized carrier with a narrow tool."""
+    robot = int(sim.getObject('/'+robot_id))
+    aliases = {sim.getObjectAlias(h,0): int(h) for h in _tree(sim,robot)}
+    root, tip = aliases[robot_id+'T'], aliases[robot_id+'_vacuum_tip']
+    keep = {root,tip}
+    h = tip
+    while h != root:
+        h = int(sim.getObjectParent(h))
+        if h < 0:
+            raise RuntimeError(robot_id+' TCP is not a descendant of its tool')
+        keep.add(h)
+    stale = [h for h in _tree(sim,root) if h not in keep]
+    if stale:
+        sim.removeObjects(stale)
+    axis = np.asarray(sim.getObjectPosition(aliases['Link6_visual'],tip))
+    length = float(np.linalg.norm(axis))
+    axis /= length
+    q = np.array([-axis[1],axis[0],0,1+axis[2]])
+    if np.linalg.norm(q) < 1e-8:
+        q=np.array([1.,0,0,0])
+    q /= np.linalg.norm(q)
+    specs = [(robot_id+'T_body',.012 if magnetic else .018,.014,.013),
+             (robot_id+'T_shaft',.010,length-.020,(length+.020)/2)]
+    if not magnetic:
+        specs.append((robot_id+'T_vacuum_cup',.012,.006,.003))
+    for alias, diameter, height, offset in specs:
+        h=int(sim.createPrimitiveShape(sim.primitiveshape_cylinder,[diameter,diameter,height],0))
+        sim.setObjectAlias(h,alias)
+        sim.setObjectParent(h,tip,False)
+        sim.setObjectPose(h,tip,[*(axis*offset).tolist(),*q.tolist()])
+        sim.setObjectInt32Param(h,sim.shapeintparam_static,1)
+        sim.setObjectInt32Param(h,sim.shapeintparam_respondable,0)
+        sim.setObjectSpecialProperty(h,sim.objectspecialproperty_collidable | sim.objectspecialproperty_measurable | sim.objectspecialproperty_renderable)
+        sim.setShapeColor(h,None,sim.colorcomponent_ambient_diffuse,[.12,.17,.21])
+    return len(specs)
+
+
+def remove_legacy_round_tables(sim) -> int:
+    """Remove the three 1.9 m legacy damping tables and their rubber pads.
+
+    The indexing pallet is now the sole workpiece support through all three
+    public workspaces.  Keeping the old discs under the conveyor visually and
+    geometrically contradicts that layout.
+    """
+    return _remove_children(sim, f"{SCENE_ROOT}/Tables")
+
+
+def remove_legacy_robot_base_discs(sim) -> int:
+    """Remove detached decorative R1_Base..R8_Base shapes.
+
+    The CR5 models already contain their own base_link visual and collision
+    geometry.  These independent discs have no children and several retain
+    stale pre-layout coordinates, so they are neither supports nor kinematic
+    parents.
+    """
+    root = _get(sim, f"{SCENE_ROOT}/RobotBases")
+    if root == -1:
+        return 0
+    objects = [int(handle) for handle in _tree(sim, root)]
+    if objects:
+        sim.removeObjects(objects)
+    return len(objects)
 
 
 def rebuild_areas(sim, areas_parent: int) -> None:
-    """Keep only the reference display riser.
+    """Create three logical shared workspaces and the reference display.
 
     The former WB1/WB2/handoff/staging stands blocked a straight cabinet
     flow.  Their support function is now provided by the indexing pallet.
     """
+    for alias, center, _size, members, _color in PUBLIC_WORKSPACES:
+        workspace = _group(sim, alias, areas_parent, (*center, 0.0))
+        sim.setObjectInt32Param(workspace, sim.objintparam_visibility_layer, 0)
+        for robot in members:
+            member = _group(sim, f"{alias}_Member_{robot}", workspace)
+            sim.setObjectInt32Param(member, sim.objintparam_visibility_layer, 0)
+
     riser_height = SURFACE_Z - BASE_TABLE_SURFACE_Z
     riser_z = BASE_TABLE_SURFACE_Z + riser_height / 2.0
     _cuboid(
@@ -344,11 +516,19 @@ def build_indexing_conveyor(sim, conveyors_parent: int) -> int:
     calibrated heights.
     """
     stale_aliases = {"Central_Indexing_Conveyor", "Indexing_Pallet_1"}
+    stale_prefixes = (
+        "Central_Indexing_Conveyor_",
+        "Indexing_Pallet_",
+        "Pallet_Lock_",
+    )
     stale = [
         int(handle)
         for handle in _tree(sim, conveyors_parent)
         if handle != conveyors_parent
-        and str(sim.getObjectAlias(handle, 0)) in stale_aliases
+        and (
+            str(sim.getObjectAlias(handle, 0)) in stale_aliases
+            or str(sim.getObjectAlias(handle, 0)).startswith(stale_prefixes)
+        )
     ]
     if stale:
         sim.removeObjects(stale)
@@ -408,11 +588,13 @@ def build_indexing_conveyor(sim, conveyors_parent: int) -> int:
 
 # ---- station layout ------------------------------------------------------
 WB1_CENTER = (-3.15, 0.25)
+WB1_MICRO_CENTER = (WB1_CENTER[0] + WB1_MICRO_INDEX_X, WB1_CENTER[1])
 WB2_CENTER = (-1.20, 0.25)
+WB2_MICRO_CENTER = (WB2_CENTER[0] + WB2_MICRO_INDEX_X, WB2_CENTER[1])
 HANDOFF_CENTER = (-2.45, 0.40)
 R4_HANDOFF_CENTER = (-2.05, 0.45)
 STAGING_CENTER = (0.05, 0.25)          # S78 staging table
-REF_CENTER = (0.75, -0.10)             # right round table (reference product)
+REF_CENTER = (1.65, 1.25)              # compact reference display outside public workspaces
 CONVEYOR_CENTER = (-3.55, 1.35)
 SHELL_POSITIONS = [(-3.65, 1.25)]
 PLATE_STAND_CENTER = (-3.90, -0.62)
@@ -427,8 +609,32 @@ R3_RAIL_PICK_POSITIONS = (
     (-2.35, -0.76625, 0.29725),
     (-2.55, -0.76625, 0.29725),
 )
-R5_BASKET_CENTER = (-1.20, -0.55)
-R6_BASKET_CENTER = (-0.30, 0.75)
+R4_BASKET_CENTER = (-1.58, 1.12)
+R5_BASKET_CENTER = (-1.20, -0.65)
+R6_BASKET_CENTER = (-0.50, -0.62)
+DOOR_SUPPLY_CENTER = (0.70, -0.50)
+
+# Desired physical footprint centres.  The processed CAD origins are highly
+# offset, so build_product_scene converts these centres back to object origins
+# before placement.  This keeps each TCP over the visible part, not its STL
+# origin.
+DEVICE_SOURCE_CENTERS = {
+    "psu": (-1.69, 1.12),
+    "servo": (-1.58, 1.12),
+    "eds": (-1.47, 1.12),
+    "plc": (-1.32, -0.65),
+    "dma": (-1.18, -0.65),
+    "filter": (0.70, -0.50),
+    "contactor": (-0.59, -0.62),
+    "breaker": (-0.49, -0.62),
+    "com5": (-0.39, -0.62),
+}
+SOURCE_PART_ALIASES = {
+    "psu": "PSU_1", "servo": "Servo_1", "eds": "EDS_1",
+    "plc": "PLC_1", "dma": "DMA_1", "filter": "Filter_1",
+    "contactor": "Contactor_1", "breaker": "Breaker_1",
+    "com5": "COM5_1", "mounting_panel": "Mounting_Panel_1",
+}
 FINISHED_CONVEYOR = ((0.62, -0.92), 2.2, 0.42)
 INDEX_STATIONS = (
     ("WB1", WB1_CENTER),
@@ -446,8 +652,8 @@ HOME_REF_POSITIONS = {
     "R3": (-2.4948, -0.4486, 0.500),
     "R4": (-1.55, 0.55, 0.70),
     "R5": (-1.55, -0.20, 0.70),
-    "R6": (-0.60, 0.35, 0.70),
-    "R7": (0.62, 0.25, 0.70),
+    "R6": (-0.30, -0.35, 0.70),
+    "R7": (0.10, 0.55, 0.70),
     "R8": (0.35, -0.45, 0.70),
 }
 
@@ -459,24 +665,57 @@ def _load_manifest() -> dict:
 def _world_bbox(
     sim, handles: list[int], info_lo: list, info_hi: list
 ) -> tuple[np.ndarray, np.ndarray]:
-    """World-space bbox of the imported shapes, computed from the manifest
-    local bbox corners projected through each handle's world matrix."""
-    lo = np.array(info_lo, dtype=float)
-    hi = np.array(info_hi, dtype=float)
-    corners = np.array(
-        [
-            [x, y, z]
-            for x in (lo[0], hi[0])
-            for y in (lo[1], hi[1])
-            for z in (lo[2], hi[2])
-        ]
-    )
+    """World-space bbox from each imported shape's actual local BB.
+
+    CoppeliaSim may choose a non-identity reference frame while importing an
+    STL.  Manifest corners are expressed in CAD coordinates and therefore
+    cannot be projected directly through the post-import object matrix.
+    """
     world = []
     for handle in handles:
+        # Shape bounding boxes have their own pose in CoppeliaSim 4.10.
+        # Mesh vertices, unlike BB extrema, are in the shape frame.
+        corners = np.asarray(sim.getShapeMesh(handle)[0], dtype=float).reshape(-1, 3)
         matrix = np.array(sim.getObjectMatrix(handle, -1), dtype=float).reshape(3, 4)
         world.append(corners @ matrix[:3, :3].T + matrix[:3, 3])
     stacked = np.vstack(world)
     return stacked.min(axis=0), stacked.max(axis=0)
+
+
+def _axis_alignment_rotation(
+    local_size: np.ndarray, manifest_size: np.ndarray
+) -> np.ndarray:
+    """Map an importer's local BB axes back to manifest CAD axes.
+
+    CoppeliaSim can choose a different axis-aligned shape frame per STL.  The
+    mapping is therefore inferred per part from its three side lengths.  A
+    proper rotation is returned; when two signs are geometrically equivalent,
+    the positive permutation is preferred and the last row is flipped only
+    when required to keep determinant +1.
+    """
+    best: tuple[float, tuple[int, int, int]] | None = None
+    scale = max(float(np.max(manifest_size)), 1e-9)
+    for permutation in itertools.permutations(range(3)):
+        error = float(
+            np.max(
+                np.abs(local_size[list(permutation)] - manifest_size)
+            )
+            / scale
+        )
+        if best is None or error < best[0]:
+            best = (error, permutation)
+    assert best is not None
+    if best[0] > 0.03:
+        raise RuntimeError(
+            "imported STL bounding-box dimensions do not match manifest: "
+            f"local={local_size.tolist()}, manifest={manifest_size.tolist()}"
+        )
+    rotation = np.zeros((3, 3), dtype=float)
+    for world_axis, local_axis in enumerate(best[1]):
+        rotation[world_axis, local_axis] = 1.0
+    if np.linalg.det(rotation) < 0.0:
+        rotation[2, :] *= -1.0
+    return rotation
 
 
 def import_part(sim, part_id: str, alias: str, parent: int, info: dict) -> list[int]:
@@ -495,6 +734,9 @@ def import_part(sim, part_id: str, alias: str, parent: int, info: dict) -> list[
     if not handles:
         raise RuntimeError(f"importShape returned no handles for {part_id}")
     for index, handle in enumerate(handles):
+        # Preserve imported CAD geometry and explicitly make the shape frame
+        # the CAD frame. Never infer a mesh rotation from oriented BB sizes.
+        sim.relocateShapeFrame(handle, [0, 0, 0, 0, 0, 0, 1])
         sim.setObjectAlias(handle, alias if index == 0 else f"{alias}_{index}", {"aliasIndex": 0})
         if parent != -1:
             sim.setObjectParent(handle, parent, True)
@@ -521,10 +763,10 @@ def place_part(
     """Place an imported part at ``world_position`` with the given world
     orientation (identity = upright assembly pose).
 
-    The mesh is stored in the shape exactly as written by the preprocessor
-    (verified: no baked importer rotation), so the object frame is set
-    directly.  With ``snap_z_min`` the oriented mesh's world z-min lands on
-    ``world_position[2]`` (belt/stand/rack/basket floors).
+    CoppeliaSim may choose a different axis-aligned local bounding-box frame
+    for each imported STL.  The frame is mapped back to the manifest CAD axes
+    before placement.  With ``snap_z_min`` the oriented mesh's world z-min
+    lands on ``world_position[2]`` (belt/stand/rack/basket floors).
     """
     rotation = np.eye(3) if orientation is None else np.asarray(orientation, dtype=float)
     lo = np.array(info["bbox_lo"], dtype=float)
@@ -541,23 +783,104 @@ def place_part(
     expected_center = expected.mean(axis=0)
     if snap_z_min:
         expected_center[2] += world_position[2] - expected[:, 2].min()
+    root_frame_correction = np.eye(3)
+    root_local_center = (lo + hi) / 2.0
     for handle in handles:
-        matrix = np.array(sim.getObjectMatrix(handle, -1), dtype=float).reshape(3, 4)
-        # project the local corners through the TARGET rotation plus the
-        # current frame position: the delta must account for the rotation
-        # change that is about to be applied.
-        projected = corners @ rotation.T + matrix[:3, 3]
-        delta = expected_center - projected.mean(axis=0)
-        corrected = np.hstack((rotation, (matrix[:3, 3] + delta)[:, None]))
-        sim.setObjectMatrix(handle, -1, corrected.reshape(-1).tolist())
+        vertices = np.asarray(sim.getShapeMesh(handle)[0]).reshape(-1, 3)
+        if max(np.max(np.abs(vertices.min(0) - lo)),
+               np.max(np.abs(vertices.max(0) - hi))) > 0.0002:
+            raise RuntimeError(f'{sim.getObjectAlias(handle, 0)} mesh is not in the canonical CAD frame')
+        translation = expected_center - rotation @ ((lo + hi) / 2.0)
+        matrix = np.column_stack((rotation, translation))
+        sim.setObjectMatrix(handle, -1, matrix.reshape(-1).tolist())
     check_lo, check_hi = _world_bbox(sim, handles, info["bbox_lo"], info["bbox_hi"])
     residual = np.max(np.abs((check_lo + check_hi) / 2.0 - expected_center))
-    if residual > 0.005:
-        print(
-            f"  WARNING: {sim.getObjectAlias(handles[0], 0)} bbox residual "
-            f"{residual:.4f} m (expected centre {expected_center}, "
-            f"got {(check_lo + check_hi) / 2.0})"
+    extent_error = np.max(np.abs((check_hi-check_lo) - np.ptp(expected, axis=0)))
+    if max(residual, extent_error) > 0.0002:
+        raise RuntimeError(f'mesh placement mismatch: centre={residual}, extent={extent_error}')
+    if root_frame_correction is None or root_local_center is None:
+        raise RuntimeError("imported part has no root shape")
+    add_part_collision_proxies(
+        sim,
+        handles,
+        info,
+        root_frame_correction,
+        root_local_center,
+    )
+
+
+def add_part_collision_proxies(
+    sim,
+    handles: list[int],
+    info: dict,
+    frame_correction: np.ndarray,
+    root_local_center: np.ndarray,
+) -> None:
+    """Attach conservative primitive collision geometry to a visual STL.
+
+    Detailed cabinet meshes are retained for rendering.  Collision queries
+    use these proxies: a full bounding box for rails/devices and four open
+    perimeter walls for the shell, so top-down tools can enter the cabinet.
+    """
+    root = int(handles[0])
+    alias = str(sim.getObjectAlias(root, 0))
+    if 'shell' in alias.lower() or 'mounting_panel' in alias.lower():
+        # Keep the real rim, openings and mounting faces in collision checks.
+        return
+    lo = np.array(info["bbox_lo"], dtype=float)
+    hi = np.array(info["bbox_hi"], dtype=float)
+    center = (lo + hi) / 2.0
+    size = hi - lo
+    specifications: list[tuple[np.ndarray, np.ndarray]]
+    if "shell" in alias.lower():
+        wall = min(0.014, float(size[0]) * 0.08, float(size[1]) * 0.08)
+        specifications = [
+            (np.array([wall, size[1], size[2]]),
+             np.array([lo[0] + wall / 2.0, center[1], center[2]])),
+            (np.array([wall, size[1], size[2]]),
+             np.array([hi[0] - wall / 2.0, center[1], center[2]])),
+            (np.array([max(size[0] - 2 * wall, wall), wall, size[2]]),
+             np.array([center[0], lo[1] + wall / 2.0, center[2]])),
+            (np.array([max(size[0] - 2 * wall, wall), wall, size[2]]),
+             np.array([center[0], hi[1] - wall / 2.0, center[2]])),
+        ]
+    else:
+        specifications = [(size, center)]
+    special = (
+        sim.objectspecialproperty_collidable
+        | sim.objectspecialproperty_measurable
+        | sim.objectspecialproperty_detectable_all
+    )
+    for index, (proxy_size, local_center) in enumerate(specifications, start=1):
+        proxy = int(
+            sim.createPrimitiveShape(
+                sim.primitiveshape_cuboid,
+                [float(value) for value in proxy_size],
+                0,
+            )
         )
+        sim.setObjectAlias(proxy, f"COL_{alias}_{index}", {"aliasIndex": 0})
+        sim.setObjectParent(proxy, root, False)
+        proxy_local_position = (
+            root_local_center
+            + frame_correction.T @ (local_center - center)
+        )
+        proxy_local_rotation = frame_correction.T
+        proxy_local_matrix = np.hstack(
+            (proxy_local_rotation, np.zeros((3, 1), dtype=float))
+        )
+        sim.setObjectPosition(
+            proxy, root, [float(value) for value in proxy_local_position]
+        )
+        sim.setObjectQuaternion(
+            proxy,
+            root,
+            sim.getQuaternionFromMatrix(proxy_local_matrix.reshape(-1).tolist()),
+        )
+        sim.setObjectInt32Param(proxy, sim.shapeintparam_static, 1)
+        sim.setObjectInt32Param(proxy, sim.shapeintparam_respondable, 0)
+        sim.setObjectInt32Param(proxy, sim.objintparam_visibility_layer, 0)
+        sim.setObjectSpecialProperty(proxy, special)
 
 
 def remove_placeholder_products(sim) -> dict:
@@ -568,6 +891,44 @@ def remove_placeholder_products(sim) -> dict:
         "areas": _remove_children(sim, AREAS_PATH),
         "ground": _remove_children(sim, f"{SCENE_ROOT}/Ground_Group"),
     }
+    # These scripts are created only for a live planning or validation call.
+    # If an audit is interrupted, they can otherwise be saved into the .ttt
+    # and initialized again on the next scene launch.
+    transient_helpers = [
+        int(handle)
+        for handle in _tree(sim, int(sim.handle_scene))
+        if str(sim.getObjectAlias(handle, 0))
+        in {
+            "Motion_Collision_Planner",
+            "Assembly_Collision_Planner",
+            "Assembly_Runtime_Batch",
+        }
+    ]
+    if transient_helpers:
+        sim.removeObjects(transient_helpers)
+    removed["transient_runtime_helpers"] = len(transient_helpers)
+    # An interrupted preflight can leave picked parts parented below a robot
+    # tool, outside /FiveCR5A_Cell/Parts.  Remove those stale process
+    # instances before importing the fresh set, otherwise aliases and TCP
+    # attachments become ambiguous on the next build.
+    process_aliases = {
+        "Shell_1", "Rail_H1", "Rail_1", "Rail_2", "PLC_1", "PSU_1",
+        "Servo_1", "DMA_1", "Contactor_1", "Breaker_1",
+        "Assembly_In_Process",
+    }
+    stale_process_roots = [
+        int(handle)
+        for handle in _tree(sim, int(sim.handle_scene))
+        if str(sim.getObjectAlias(handle, 0)) in process_aliases
+    ]
+    stale_process = list(dict.fromkeys(
+        int(descendant)
+        for root in stale_process_roots
+        for descendant in _tree(sim, root)
+    ))
+    if stale_process:
+        sim.removeObjects(stale_process)
+    removed["stale_tool_parts"] = len(stale_process)
     orphans = [
         handle
         for handle in _tree(sim, int(sim.handle_scene))
@@ -766,14 +1127,22 @@ def build_product_scene(sim, output: Path) -> dict:
         if str(sim.getObjectAlias(handle, 0)) == "Finished_Conveyor"
     ]
     if old_output:
-        sim.removeObjects(old_output)
+        old_output_trees = list(dict.fromkeys(
+            int(descendant)
+            for root in old_output
+            for descendant in _tree(sim, root)
+        ))
+        sim.removeObjects(old_output_trees)
 
     report["robots_reparented"] = ensure_robots_at_root(sim)
     report["robots_positioned"] = position_robot_bases(sim)
+    report["legacy_robot_bases_removed"] = remove_legacy_robot_base_discs(sim)
+    report["legacy_round_tables_removed"] = remove_legacy_round_tables(sim)
     report["r2_magnetic_pad"] = configure_r2_magnetic_pad(sim)
     report["r3_slim_rail_fingers"] = configure_r3_slim_rail_fingers(sim)
+    report["r8_vacuum_tool_shapes"] = configure_compact_axial_tool(sim, 'R8')
+    report['r5_vacuum_tool_shapes'] = configure_r5_vacuum_tool(sim)
     report["floor_objects"] = build_floor(sim)
-    build_wb1_table(sim)
     rebuild_areas(sim, areas_parent)
     report["indexing_pallet"] = build_indexing_conveyor(
         sim, conveyors_parent
@@ -785,6 +1154,11 @@ def build_product_scene(sim, output: Path) -> dict:
     for index, (x, y) in enumerate(SHELL_POSITIONS, start=1):
         handles = import_part(sim, "shell", f"Shell_{index}", shell_stack, manifest["parts"]["shell"])
         place_part(sim, handles, (x, y, BELT_TOP_Z), manifest["parts"]["shell"], snap_z_min=True)
+        # The internal mounting panel is part of the supplied shell
+        # subassembly, not a door installed over finished components.
+        panel_info = manifest['parts']['mounting_panel']
+        panel = import_part(sim, 'mounting_panel', f'Mounting_Panel_{index}', handles[0], panel_info)
+        place_part(sim, panel, (x,y,BELT_TOP_Z), panel_info, snap_z_min=False)
 
     # R2 rear locator rack: only the horizontal rail participates in this
     # process.  Keeping the unused spare door out of this station preserves
@@ -810,37 +1184,60 @@ def build_product_scene(sim, output: Path) -> dict:
         place_part(
             sim,
             handles,
-            (*R3_RAIL_SOURCE_ORIGINS[index], basket_floor),
+            (*_source_origin_xy(manifest['parts'][part_id], (-2.35 - 0.20*index, -0.65)), basket_floor),
             manifest["parts"][part_id],
             snap_z_min=True,
         )
 
-    r5_basket = make_basket(sim, baskets_parent, "R5_Device_Basket", R5_BASKET_CENTER, (0.26, 0.18), 0.15)
-    for part_id, alias, (x, y) in (
-        ("plc", "PLC_1", (R5_BASKET_CENTER[0] - 0.055, R5_BASKET_CENTER[1])),
-        ("psu", "PSU_1", (R5_BASKET_CENTER[0] + 0.055, R5_BASKET_CENTER[1])),
-    ):
-        handles = import_part(sim, part_id, alias, r5_basket, manifest["parts"][part_id])
-        place_part(sim, handles, (x, y, basket_floor), manifest["parts"][part_id], snap_z_min=True)
+    source_fixtures = {
+        "R4": make_basket(
+            sim, baskets_parent, "R4_Device_Basket", R4_BASKET_CENTER,
+            (0.42, 0.22), 0.16, front_wall=False,
+        ),
+        "R5": make_basket(
+            sim, baskets_parent, "R5_Device_Basket", R5_BASKET_CENTER,
+            (0.42, 0.24), 0.15, front_wall=False,
+        ),
+        "R6": make_basket(
+            sim, baskets_parent, "R6_Device_Basket", R6_BASKET_CENTER,
+            (0.34, 0.18), 0.12, front_wall=False,
+        ),
+        "R8": make_basket(sim, baskets_parent, "R8_Device_Basket", (0.70,-0.50),
+                          (0.18,0.16),0.025,front_wall=False),
+    }
+    fixture_parts = {
+        "R4": ("psu", "servo", "eds"),
+        "R5": ("plc", "dma"),
+        "R6": ("contactor", "breaker", "com5"),
+        "R8": ("filter",),
+    }
+    for robot, part_ids in fixture_parts.items():
+        for part_id in part_ids:
+            info = manifest["parts"][part_id]
+            origin_x, origin_y = _source_origin_xy(
+                info, DEVICE_SOURCE_CENTERS[part_id]
+            )
+            handles = import_part(
+                sim, part_id, SOURCE_PART_ALIASES[part_id],
+                source_fixtures[robot], info,
+            )
+            place_part(
+                sim, handles, (origin_x, origin_y, basket_floor), info,
+                snap_z_min=True,
+            )
 
-    r6_basket = make_basket(sim, baskets_parent, "R6_Device_Basket", R6_BASKET_CENTER, (0.26, 0.18), 0.15)
-    for part_id, alias, (x, y) in (
-        ("servo", "Servo_1", (R6_BASKET_CENTER[0] - 0.06, R6_BASKET_CENTER[1])),
-        ("dma", "DMA_1", (R6_BASKET_CENTER[0] - 0.02, R6_BASKET_CENTER[1])),
-        ("contactor", "Contactor_1", (R6_BASKET_CENTER[0] + 0.01, R6_BASKET_CENTER[1])),
-        ("breaker", "Breaker_1", (R6_BASKET_CENTER[0] + 0.05, R6_BASKET_CENTER[1])),
-    ):
-        handles = import_part(sim, part_id, alias, r6_basket, manifest["parts"][part_id])
-        place_part(sim, handles, (x, y, basket_floor), manifest["parts"][part_id], snap_z_min=True)
-
-    # ---- reference finished cabinet on the right round table -------------
-    # (without the door: the product is displayed open-front)
+    # References are coordinate frames, not a duplicate rendered cabinet.
     ref_root = _group(sim, "Cabinet_Product_REF", parts_parent, (*REF_CENTER, SURFACE_Z))
     for part_id, info in manifest["parts"].items():
-        if part_id == "door":
-            continue
-        handles = import_part(sim, part_id, f"REF_{part_id}", ref_root, info)
-        place_part(sim, handles, (*REF_CENTER, SURFACE_Z), info)
+        reference = _dummy(sim, (*REF_CENTER, SURFACE_Z), f'REF_{part_id}', ref_root, info['color'])
+        sim.setObjectInt32Param(reference, sim.objintparam_visibility_layer, 0)
+
+    hidden_collision_shapes = 0
+    for handle in sim.getObjectsInTree(sim.handle_scene, sim.object_shape_type, 0):
+        if 'respondable' in sim.getObjectAlias(handle, 0).lower():
+            sim.setObjectInt32Param(handle, sim.objintparam_visibility_layer, 0)
+            hidden_collision_shapes += 1
+    report['duplicate_robot_collision_shapes_hidden'] = hidden_collision_shapes
 
     # ---- process targets --------------------------------------------------
     paired_targets = build_paired_targets(manifest)
@@ -864,26 +1261,73 @@ def _center(part: dict) -> tuple:
     return tuple((lo[i] + hi[i]) / 2.0 for i in range(3))
 
 
+def _source_origin_xy(part: dict, physical_center: tuple[float, float]) -> tuple[float, float]:
+    center = _center(part)
+    return physical_center[0] - center[0], physical_center[1] - center[1]
+
+
+def _source_tcp(
+    part: dict,
+    physical_center: tuple[float, float],
+    floor_z: float,
+    *,
+    vacuum: bool = False,
+    local_xy: tuple[float, float] | None = None,
+    local_z: float | None = None,
+) -> tuple[float, float, float]:
+    """TCP on a source part placed with its bbox z-min on ``floor_z``."""
+    lo, hi = part["bbox_lo"], part["bbox_hi"]
+    center = _center(part)
+    grasp_xy = local_xy or center[:2]
+    origin_x, origin_y = _source_origin_xy(part, physical_center)
+    grasp_z = (
+        float(local_z)
+        if local_z is not None
+        else hi[2] - VACUUM_COMPRESSION_Z
+        if vacuum
+        else center[2]
+    )
+    return (
+        origin_x + grasp_xy[0],
+        origin_y + grasp_xy[1],
+        floor_z - lo[2] + grasp_z,
+    )
+
+
+def _assembly_tcp(
+    part: dict,
+    station: tuple[float, float],
+    *,
+    vacuum: bool = False,
+    local_xy: tuple[float, float] | None = None,
+    local_z: float | None = None,
+) -> tuple[float, float, float]:
+    """Corresponding TCP when the CAD part is in its assembly frame."""
+    center = _center(part)
+    grasp_xy = local_xy or center[:2]
+    grasp_z = (
+        float(local_z)
+        if local_z is not None
+        else part["bbox_hi"][2] - VACUUM_COMPRESSION_Z
+        if vacuum
+        else center[2]
+    )
+    return (
+        station[0] + grasp_xy[0],
+        station[1] + grasp_xy[1],
+        SURFACE_Z + grasp_z,
+    )
+
+
 def build_paired_targets(manifest: dict) -> dict:
-    """Target table derived from the processed-model manifest."""
+    """Build one vertical APP/TCP pair for every assigned task action."""
+    require_open_top_shell()
     shell = manifest["parts"]["shell"]
     rail_h = manifest["parts"]["rail_h1"]
-    rail_v1 = manifest["parts"]["rail_v1"]
-    rail_v2 = manifest["parts"]["rail_v2"]
-    shell_half_z = shell["bbox_hi"][2] / 2.0
     shell_height = shell["bbox_hi"][2] - shell["bbox_lo"][2]
     shell_edge_grip_z = BELT_TOP_Z + shell_height - SHELL_EDGE_GRIP_DEPTH_Z
     basket_floor = SURFACE_Z + 0.012
     rail_h_height = rail_h["bbox_hi"][2] - rail_h["bbox_lo"][2]
-    rail_height = rail_v1["bbox_hi"][2] - rail_v1["bbox_lo"][2]
-    dev_centers = {
-        part_id: _center(manifest["parts"][part_id])
-        for part_id in ("plc", "psu", "servo", "dma", "contactor", "breaker")
-    }
-
-    def pick_z(part_id: str) -> float:
-        part = manifest["parts"][part_id]
-        return basket_floor + (dev_centers[part_id][2] - part["bbox_lo"][2])
 
     targets: dict[str, tuple[tuple, float]] = {
         "R1_SHELL_PICK": (
@@ -928,83 +1372,9 @@ def build_paired_targets(manifest: dict) -> dict:
             0.480 - 0.29725,
         ),
         "R3_RAIL_PLACE_B": (
-            (-3.35145, 0.080, 0.29725),
+            (-3.35145 + WB1_MICRO_INDEX_X, 0.080, 0.29725),
             0.400 - 0.29725,
         ),
-        "R3_WB1_PICK": (
-            (
-                WB1_CENTER[0],
-                WB1_CENTER[1] + R3_ASSEMBLY_GRIP_OFFSET_Y,
-                SURFACE_Z + shell_height - R3_ASSEMBLY_GRIP_DEPTH_Z,
-            ),
-            R3_ASSEMBLY_APP_Z
-            - (SURFACE_Z + shell_height - R3_ASSEMBLY_GRIP_DEPTH_Z),
-        ),
-        "R3_HANDOFF_PLACE": (
-            (
-                HANDOFF_CENTER[0],
-                HANDOFF_CENTER[1] + R3_ASSEMBLY_GRIP_OFFSET_Y,
-                SURFACE_Z + shell_height - R3_ASSEMBLY_GRIP_DEPTH_Z,
-            ),
-            R3_HANDOFF_APP_Z
-            - (SURFACE_Z + shell_height - R3_ASSEMBLY_GRIP_DEPTH_Z),
-        ),
-        "R4_HANDOFF_PICK": (
-            (
-                R4_HANDOFF_CENTER[0] + R4_ASSEMBLY_GRIP_OFFSET_X,
-                R4_HANDOFF_CENTER[1],
-                SURFACE_Z + shell_height - R4_ASSEMBLY_GRIP_DEPTH_Z,
-            ),
-            R4_ASSEMBLY_APP_Z
-            - (SURFACE_Z + shell_height - R4_ASSEMBLY_GRIP_DEPTH_Z),
-        ),
-        "R4_WB2_PLACE": (
-            (
-                WB2_CENTER[0] + R4_ASSEMBLY_GRIP_OFFSET_X,
-                WB2_CENTER[1],
-                SURFACE_Z + shell_height - R4_ASSEMBLY_GRIP_DEPTH_Z,
-            ),
-            R4_ASSEMBLY_APP_Z
-            - (SURFACE_Z + shell_height - R4_ASSEMBLY_GRIP_DEPTH_Z),
-        ),
-        "R5_PLC_PICK": ((R5_BASKET_CENTER[0] - 0.055, R5_BASKET_CENTER[1], pick_z("plc")), APP_LIFT_Z),
-        "R5_PLC_PLACE": (
-            (WB2_CENTER[0] + dev_centers["plc"][0], WB2_CENTER[1] + dev_centers["plc"][1],
-             SURFACE_Z + dev_centers["plc"][2]),
-            APP_LIFT_Z,
-        ),
-        "R5_PSU_PICK": ((R5_BASKET_CENTER[0] + 0.055, R5_BASKET_CENTER[1], pick_z("psu")), APP_LIFT_Z),
-        "R5_PSU_PLACE": (
-            (WB2_CENTER[0] + dev_centers["psu"][0], WB2_CENTER[1] + dev_centers["psu"][1],
-             SURFACE_Z + dev_centers["psu"][2]),
-            APP_LIFT_Z,
-        ),
-        "R6_SERVO_PICK": ((R6_BASKET_CENTER[0] - 0.06, R6_BASKET_CENTER[1], pick_z("servo")), APP_LIFT_Z),
-        "R6_SERVO_PLACE": (
-            (WB2_CENTER[0] + dev_centers["servo"][0], WB2_CENTER[1] + dev_centers["servo"][1],
-             SURFACE_Z + dev_centers["servo"][2]),
-            APP_LIFT_Z,
-        ),
-        "R6_DMA_PICK": ((R6_BASKET_CENTER[0] - 0.02, R6_BASKET_CENTER[1], pick_z("dma")), APP_LIFT_Z),
-        "R6_DMA_PLACE": (
-            (WB2_CENTER[0] + dev_centers["dma"][0], WB2_CENTER[1] + dev_centers["dma"][1],
-             SURFACE_Z + dev_centers["dma"][2]),
-            APP_LIFT_Z,
-        ),
-        "R6_CONTACTOR_PICK": ((R6_BASKET_CENTER[0] + 0.01, R6_BASKET_CENTER[1], pick_z("contactor")), APP_LIFT_Z),
-        "R6_CONTACTOR_PLACE": (
-            (WB2_CENTER[0] + dev_centers["contactor"][0], WB2_CENTER[1] + dev_centers["contactor"][1],
-             SURFACE_Z + dev_centers["contactor"][2]),
-            APP_LIFT_Z,
-        ),
-        "R6_BREAKER_PICK": ((R6_BASKET_CENTER[0] + 0.05, R6_BASKET_CENTER[1], pick_z("breaker")), APP_LIFT_Z),
-        "R6_BREAKER_PLACE": (
-            (WB2_CENTER[0] + dev_centers["breaker"][0], WB2_CENTER[1] + dev_centers["breaker"][1],
-             SURFACE_Z + dev_centers["breaker"][2]),
-            APP_LIFT_Z,
-        ),
-        "R6_WB2_PICK": ((*WB2_CENTER, SURFACE_Z + shell_half_z), APP_LIFT_Z),
-        "R6_STAGING_PLACE": ((*STAGING_CENTER, SURFACE_Z + shell_half_z), APP_LIFT_Z),
         "R7_SCREW_1": ((STAGING_CENTER[0] - 0.1615, STAGING_CENTER[1] + 0.115,
                         SURFACE_Z + shell["bbox_hi"][2]), SCREW_LIFT_Z),
         "R7_SCREW_2": ((STAGING_CENTER[0] - 0.1615, STAGING_CENTER[1] - 0.115,
@@ -1013,13 +1383,63 @@ def build_paired_targets(manifest: dict) -> dict:
                         SURFACE_Z + shell["bbox_hi"][2]), SCREW_LIFT_Z),
         "R7_SCREW_4": ((STAGING_CENTER[0] + 0.1615, STAGING_CENTER[1] - 0.115,
                         SURFACE_Z + shell["bbox_hi"][2]), SCREW_LIFT_Z),
-        "R8_STAGING_PICK": ((*STAGING_CENTER, SURFACE_Z + shell_half_z), APP_LIFT_Z),
-        "R8_OUTPUT_PLACE": (
-            (FINISHED_CONVEYOR[0][0] - 0.32, FINISHED_CONVEYOR[0][1],
-             BELT_TOP_Z + shell_half_z),
-            APP_LIFT_Z,
-        ),
     }
+
+    # Derive both endpoints from the SAME material grasp point. The former
+    # hand-tuned placement coordinates belonged to the back-up CAD frame.
+    rail_local = (R2_RAIL_GRIP_OFFSET_X, _center(rail_h)[1])
+    rail_grip_z = flat_patch_height('rail_h1', rail_local, .007) - R2_MAGNET_COMPRESSION
+    targets['R2_RAIL_PICK_H'] = (
+        (PLATE_STAND_CENTER[0] + rail_local[0],
+         PLATE_STAND_CENTER[1] - 0.105 + rail_local[1],
+         SURFACE_Z - rail_h['bbox_lo'][2] + rail_grip_z), 0.19)
+    targets['R2_RAIL_PLACE_H'] = (
+        _assembly_tcp(rail_h, WB1_CENTER, vacuum=True, local_xy=rail_local, local_z=rail_grip_z),
+        0.10,
+    )
+    for index, (letter, part_id) in enumerate((('A','rail_v1'), ('B','rail_v2'))):
+        info = manifest['parts'][part_id]
+        grip_z = info['bbox_hi'][2] - 0.010
+        source_xy = (-2.35 - 0.20*index, -0.65)
+        targets[f'R3_RAIL_PICK_{letter}'] = (
+            _source_tcp(info, source_xy, basket_floor, local_z=grip_z), 0.12)
+        targets[f'R3_RAIL_PLACE_{letter}'] = (
+            _assembly_tcp(info, WB1_CENTER if index == 0 else WB1_MICRO_CENTER, local_z=grip_z), 0.09)
+
+    assignments = {
+        "R4": (("psu", False), ("servo", False), ("eds", False)),
+        "R5": (("plc", True), ("dma", True)),
+        "R6": (("contactor", False), ("breaker", False), ("com5", False)),
+        "R8": (("filter", True),),
+    }
+    for robot, parts in assignments.items():
+        for part_id, vacuum in parts:
+            info = manifest["parts"][part_id]
+            grasp = vacuum_grasp_point(part_id) if vacuum else None
+            stem = part_id.upper()
+            station = (
+                STAGING_CENTER
+                if part_id == "com5" or robot == 'R8'
+                else WB2_MICRO_CENTER
+                if robot == "R6"
+                else WB2_CENTER
+            )
+            targets[f"{robot}_{stem}_PICK"] = (
+                _source_tcp(
+                    info, DEVICE_SOURCE_CENTERS[part_id], basket_floor,
+                    vacuum=vacuum,
+                    local_xy=grasp[:2] if vacuum else None,
+                    local_z=grasp[2]-VACUUM_COMPRESSION_Z if vacuum else None,
+                ),
+                APP_LIFT_Z,
+            )
+            targets[f"{robot}_{stem}_PLACE"] = (
+                _assembly_tcp(info, station, vacuum=vacuum,
+                    local_xy=grasp[:2] if vacuum else None,
+                    local_z=grasp[2]-VACUUM_COMPRESSION_Z if vacuum else None),
+                APP_LIFT_Z,
+            )
+
     return targets
 
 
@@ -1029,28 +1449,100 @@ def create_targets(sim, targets_parent: int, paired_targets: dict) -> int:
         name = f"R{robot_id}"
         group = _group(sim, f"{name}_Targets", targets_parent)
         color = ROBOT_TARGET_COLORS[name]
-        _dummy(sim, tuple(HOME_REF_POSITIONS[name]), f"{name}_HOME_REF", group, color)
+        home = _dummy(
+            sim, tuple(HOME_REF_POSITIONS[name]), f"{name}_HOME_REF", group, color
+        )
+        sim.setObjectQuaternion(home, -1, list(ROBOT_TCP_QUATERNIONS[name]))
         count += 1
         for target_name, (position, lift) in paired_targets.items():
             if not target_name.startswith(f"{name}_"):
                 continue
-            _dummy(sim, tuple(position), f"{target_name}_TCP", group, color)
-            _dummy(sim, (position[0], position[1], position[2] + lift), f"{target_name}_APP", group, color)
+            tcp = _dummy(
+                sim, tuple(position), f"{target_name}_TCP", group, color
+            )
+            app = _dummy(
+                sim, (position[0], position[1], position[2] + lift),
+                f"{target_name}_APP", group, color,
+            )
+            quaternion = list(_target_quaternion(target_name))
+            sim.setObjectQuaternion(tcp, -1, quaternion)
+            sim.setObjectQuaternion(app, -1, quaternion)
             count += 2
     return count
 
 
+def _target_area(name: str) -> str:
+    if name.startswith("R1_SHELL_PICK"):
+        return "cabinet_conveyor_area"
+    if name.startswith("R2_RAIL_PICK"):
+        return "r2_stand_area"
+    if name.startswith("R3_RAIL_PICK"):
+        return "r3_rack_area"
+    if name.startswith("R4_") and name.endswith("_PICK"):
+        return "r4_device_supply_area"
+    if name.startswith("R5_") and name.endswith("_PICK"):
+        return "r5_device_supply_area"
+    if name.startswith("R6_") and name.endswith("_PICK"):
+        return "r6_device_supply_area"
+    if name.startswith("R8_DOOR_PICK"):
+        return "door_supply_area"
+    if name.startswith(("R1_", "R2_", "R3_")):
+        return "public_workspace_1"
+    if name.startswith(("R4_", "R5_")) or (
+        name.startswith("R6_") and "COM5" not in name
+    ):
+        return "public_workspace_2"
+    return "public_workspace_3"
+
+
+def _target_quaternion(name: str) -> tuple[float, float, float, float]:
+    robot = name.split("_", 1)[0]
+    values = TARGET_QUATERNION_OVERRIDES.get(
+        name, ROBOT_TCP_QUATERNIONS[robot]
+    )
+    norm = sum(float(value) ** 2 for value in values) ** 0.5
+    return tuple(float(value) / norm for value in values)
+
+
 def sync_points_config(paired_targets: dict) -> None:
-    """Keep checked-in target coordinates identical to generated dummies."""
+    """Rebuild the canonical point registry from generated task targets."""
     path = REPO_ROOT / "configs" / "points.yaml"
-    points = yaml.safe_load(path.read_text(encoding="utf-8"))
+    points: dict[str, dict] = {}
     for robot, position in HOME_REF_POSITIONS.items():
-        points[f"{robot}_HOME_REF"]["position"] = [float(v) for v in position]
+        points[f"{robot}_HOME_REF"] = {
+            "robot": robot,
+            "area": f"{robot.lower()}_home",
+            "action": "park",
+            "position": [float(v) for v in position],
+            "orientation_quaternion": [
+                float(v) for v in ROBOT_TCP_QUATERNIONS[robot]
+            ],
+            "description": f"{robot} down-facing PARK reference",
+        }
     for name, (position, lift) in paired_targets.items():
+        robot = name.split("_", 1)[0]
         tcp = [float(value) for value in position]
         app = [tcp[0], tcp[1], tcp[2] + float(lift)]
-        points[f"{name}_TCP"]["position"] = tcp
-        points[f"{name}_APP"]["position"] = app
+        quaternion = [float(v) for v in _target_quaternion(name)]
+        action = name.removeprefix(f"{robot}_").lower()
+        points[f"{name}_TCP"] = {
+            "robot": robot,
+            "area": _target_area(name),
+            "action": action,
+            "position": tcp,
+            "orientation_quaternion": quaternion,
+            "description": f"{robot} {action} contact TCP",
+        }
+        points[f"{name}_APP"] = {
+            "robot": robot,
+            "area": _target_area(name),
+            "action": f"{action}_approach",
+            "position": app,
+            "orientation_quaternion": quaternion,
+            "description": (
+                f"{robot} {action} vertical APP; same XY/orientation as TCP"
+            ),
+        }
     path.write_text(
         yaml.safe_dump(points, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
@@ -1071,6 +1563,9 @@ def sync_scene_contract(sim, output: Path) -> None:
     contract["counts"]["target_tree_dummies"] = len(
         sim.getObjectsInTree(targets, sim.object_dummy_type, 0)
     )
+    contract["counts"]["process_targets"] = len(HOME_REF_POSITIONS) + 2 * len(
+        build_paired_targets(_load_manifest())
+    )
     path.write_text(
         yaml.safe_dump(contract, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
@@ -1082,6 +1577,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=23000, type=int)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument('--targets-only', action='store_true', help='Regenerate APP/TCPs without reimporting the product meshes')
     return parser.parse_args()
 
 
@@ -1089,6 +1585,17 @@ def main() -> int:
     args = parse_args()
     client = RemoteAPIClient(args.host, args.port)
     sim = client.require("sim")
+    if args.targets_only:
+        if sim.getSimulationState() != sim.simulation_stopped:
+            raise RuntimeError('stop simulation before updating targets')
+        _remove_children(sim, TARGETS_PATH)
+        paired = build_paired_targets(_load_manifest())
+        create_targets(sim, int(sim.getObject(TARGETS_PATH)), paired)
+        sim.saveScene(str(args.output))
+        sync_points_config(paired)
+        sync_scene_contract(sim, args.output)
+        print('updated task targets and scene contract')
+        return 0
     report = build_product_scene(sim, args.output)
     for key, value in report.items():
         print(f"{key}: {value}")

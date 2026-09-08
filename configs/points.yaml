@@ -1,662 +1,832 @@
 R1_HOME_REF:
   robot: R1
   area: r1_home
-  action: home
+  action: park
   position:
   - -3.65
   - 1.3625
   - 0.482
-  description: Cabinet shell feed (conveyor -> workbench 1) home reference
+  orientation_quaternion:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R1 down-facing PARK reference
+R2_HOME_REF:
+  robot: R2
+  area: r2_home
+  action: park
+  position:
+  - -3.76
+  - -0.725
+  - 0.5
+  orientation_quaternion:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R2 down-facing PARK reference
+R3_HOME_REF:
+  robot: R3
+  area: r3_home
+  action: park
+  position:
+  - -2.4948
+  - -0.4486
+  - 0.5
+  orientation_quaternion:
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R3 down-facing PARK reference
+R4_HOME_REF:
+  robot: R4
+  area: r4_home
+  action: park
+  position:
+  - -1.55
+  - 0.55
+  - 0.7
+  orientation_quaternion:
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R4 down-facing PARK reference
+R5_HOME_REF:
+  robot: R5
+  area: r5_home
+  action: park
+  position:
+  - -1.55
+  - -0.2
+  - 0.7
+  orientation_quaternion:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R5 down-facing PARK reference
+R6_HOME_REF:
+  robot: R6
+  area: r6_home
+  action: park
+  position:
+  - -0.3
+  - -0.35
+  - 0.7
+  orientation_quaternion:
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R6 down-facing PARK reference
+R7_HOME_REF:
+  robot: R7
+  area: r7_home
+  action: park
+  position:
+  - 0.1
+  - 0.55
+  - 0.7
+  orientation_quaternion:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R7 down-facing PARK reference
+R8_HOME_REF:
+  robot: R8
+  area: r8_home
+  action: park
+  position:
+  - 0.35
+  - -0.45
+  - 0.7
+  orientation_quaternion:
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R8 down-facing PARK reference
 R1_SHELL_PICK_TCP:
   robot: R1
   area: cabinet_conveyor_area
   action: shell_pick
   position:
   - -3.65
-  - 1.3625
-  - 0.392
-  description: Cabinet shell outer-frame pick TCP
+  - 1.36349
+  - 0.405
+  orientation_quaternion: &id001
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R1 shell_pick contact TCP
 R1_SHELL_PICK_APP:
   robot: R1
   area: cabinet_conveyor_area
   action: shell_pick_approach
   position:
   - -3.65
-  - 1.3625
-  - 0.482
-  description: Cabinet shell outer-frame vertical pick approach
+  - 1.36349
+  - 0.495
+  orientation_quaternion: *id001
+  description: R1 shell_pick vertical APP; same XY/orientation as TCP
 R1_WB1_PLACE_TCP:
   robot: R1
-  area: workbench1_area
+  area: public_workspace_1
   action: wb1_place
   position:
   - -3.15
-  - 0.3625
-  - 0.392
-  description: Cabinet shell outer-frame place TCP at workbench 1
+  - 0.36349
+  - 0.405
+  orientation_quaternion: &id002
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R1 wb1_place contact TCP
 R1_WB1_PLACE_APP:
   robot: R1
-  area: workbench1_area
+  area: public_workspace_1
   action: wb1_place_approach
   position:
   - -3.15
-  - 0.3625
-  - 0.482
-  description: Cabinet shell outer-frame vertical place approach
-R2_HOME_REF:
-  robot: R2
-  area: r2_home
-  action: home
-  position:
-  - -3.76
-  - -0.725
-  - 0.5
-  description: Horizontal frame rail installation home reference
+  - 0.36349
+  - 0.495
+  orientation_quaternion: *id002
+  description: R1 wb1_place vertical APP; same XY/orientation as TCP
 R2_RAIL_PICK_H_TCP:
   robot: R2
   area: r2_stand_area
   action: rail_pick_h
   position:
   - -3.76
-  - -0.725
-  - 0.3093
-  description: Horizontal rail center magnetic-puck pick TCP with 1 mm compression
+  - -0.72495
+  - 0.26950571
+  orientation_quaternion: &id003
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R2 rail_pick_h contact TCP
 R2_RAIL_PICK_H_APP:
   robot: R2
   area: r2_stand_area
   action: rail_pick_h_approach
   position:
   - -3.76
-  - -0.725
-  - 0.5
-  description: Horizontal rail vertical pick and carry APP
+  - -0.72495
+  - 0.45950571
+  orientation_quaternion: *id003
+  description: R2 rail_pick_h vertical APP; same XY/orientation as TCP
 R2_RAIL_PLACE_H_TCP:
   robot: R2
-  area: workbench1_area
+  area: public_workspace_1
   action: rail_place_h
   position:
-  - -3.010146121109595
-  - 0.24994297146556427
-  - 0.3164417337761357
-  description: Horizontal rail center magnetic-puck place TCP with 1 mm compression
+  - -3.01
+  - 0.25005
+  - 0.27670571
+  orientation_quaternion: &id004
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R2 rail_place_h contact TCP
 R2_RAIL_PLACE_H_APP:
   robot: R2
-  area: workbench1_area
+  area: public_workspace_1
   action: rail_place_h_approach
   position:
-  - -3.010146121109595
-  - 0.24994297146556427
-  - 0.5
-  description: Horizontal rail high arc carry and place APP
-R3_HOME_REF:
-  robot: R3
-  area: r3_home
-  action: home
-  position:
-  - -2.4948
-  - -0.4486
-  - 0.5
-  description: Vertical frame rail installation and handoff transfer home reference
-R3_HANDOFF_PLACE_TCP:
-  robot: R3
-  area: handoff_area
-  action: handoff_place
-  position:
-  - -2.45
-  - 0.2
-  - 0.392
-  description: Vertical frame rail installation and handoff transfer - handoff place
-    TCP
-R3_HANDOFF_PLACE_APP:
-  robot: R3
-  area: handoff_area
-  action: handoff_place_approach
-  position:
-  - -2.45
-  - 0.2
-  - 0.46
-  description: Vertical frame rail installation and handoff transfer - handoff place
-    approach
+  - -3.01
+  - 0.25005
+  - 0.37670570999999997
+  orientation_quaternion: *id004
+  description: R2 rail_place_h vertical APP; same XY/orientation as TCP
 R3_RAIL_PICK_A_TCP:
   robot: R3
   area: r3_rack_area
   action: rail_pick_a
   position:
   - -2.35
-  - -0.76625
-  - 0.29725
-  description: Vertical frame rail installation and handoff transfer - rail pick a
-    TCP
+  - -0.65
+  - 0.3123
+  orientation_quaternion: &id005
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R3 rail_pick_a contact TCP
 R3_RAIL_PICK_A_APP:
   robot: R3
   area: r3_rack_area
   action: rail_pick_a_approach
   position:
   - -2.35
-  - -0.76625
-  - 0.48
-  description: Vertical frame rail installation and handoff transfer - rail pick a
-    approach
+  - -0.65
+  - 0.4323
+  orientation_quaternion: *id005
+  description: R3 rail_pick_a vertical APP; same XY/orientation as TCP
 R3_RAIL_PICK_B_TCP:
   robot: R3
   area: r3_rack_area
   action: rail_pick_b
   position:
-  - -2.55
-  - -0.76625
-  - 0.29725
-  description: Vertical frame rail installation and handoff transfer - rail pick b
-    TCP
+  - -2.5500000000000003
+  - -0.65
+  - 0.3123
+  orientation_quaternion: &id006
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R3 rail_pick_b contact TCP
 R3_RAIL_PICK_B_APP:
   robot: R3
   area: r3_rack_area
   action: rail_pick_b_approach
   position:
-  - -2.55
-  - -0.76625
-  - 0.44
-  description: Vertical frame rail installation and handoff transfer - rail pick b
-    approach
+  - -2.5500000000000003
+  - -0.65
+  - 0.4323
+  orientation_quaternion: *id006
+  description: R3 rail_pick_b vertical APP; same XY/orientation as TCP
 R3_RAIL_PLACE_A_TCP:
   robot: R3
-  area: workbench1_area
+  area: public_workspace_1
   action: rail_place_a
   position:
   - -2.94845
-  - 0.12
-  - 0.29725
-  description: Vertical frame rail installation and handoff transfer - rail place
-    a TCP
+  - 0.24755
+  - 0.3075
+  orientation_quaternion: &id007
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R3 rail_place_a contact TCP
 R3_RAIL_PLACE_A_APP:
   robot: R3
-  area: workbench1_area
+  area: public_workspace_1
   action: rail_place_a_approach
   position:
   - -2.94845
-  - 0.12
-  - 0.48
-  description: Vertical frame rail installation and handoff transfer - rail place
-    a approach
+  - 0.24755
+  - 0.39749999999999996
+  orientation_quaternion: *id007
+  description: R3 rail_place_a vertical APP; same XY/orientation as TCP
 R3_RAIL_PLACE_B_TCP:
   robot: R3
-  area: workbench1_area
+  area: public_workspace_1
   action: rail_place_b
   position:
-  - -3.35145
-  - 0.08
-  - 0.29725
-  description: Vertical frame rail installation and handoff transfer - rail place
-    b TCP
+  - -3.2314499999999997
+  - 0.25125
+  - 0.3075
+  orientation_quaternion: &id008
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R3 rail_place_b contact TCP
 R3_RAIL_PLACE_B_APP:
   robot: R3
-  area: workbench1_area
+  area: public_workspace_1
   action: rail_place_b_approach
   position:
-  - -3.35145
-  - 0.08
-  - 0.4
-  description: Vertical frame rail installation and handoff transfer - rail place
-    b approach
-R3_WB1_PICK_TCP:
-  robot: R3
-  area: workbench1_area
-  action: wb1_pick
-  position:
-  - -3.15
-  - 0.04999999999999999
-  - 0.392
-  description: Vertical frame rail installation and handoff transfer - wb1 pick TCP
-R3_WB1_PICK_APP:
-  robot: R3
-  area: workbench1_area
-  action: wb1_pick_approach
-  position:
-  - -3.15
-  - 0.04999999999999999
-  - 0.48
-  description: Vertical frame rail installation and handoff transfer - wb1 pick approach
-R4_HOME_REF:
-  robot: R4
-  area: r4_home
-  action: home
-  position:
-  - -1.55
-  - 0.55
-  - 0.7
-  description: Handoff -> workbench 2 transfer home reference
-R4_HANDOFF_PICK_TCP:
-  robot: R4
-  area: handoff_area
-  action: handoff_pick
-  position:
-  - -1.8499999999999999
-  - 0.45
-  - 0.392
-  description: Handoff -> workbench 2 transfer - handoff pick TCP
-R4_HANDOFF_PICK_APP:
-  robot: R4
-  area: handoff_area
-  action: handoff_pick_approach
-  position:
-  - -1.8499999999999999
-  - 0.45
-  - 0.48
-  description: Handoff -> workbench 2 transfer - handoff pick approach
-R4_WB2_PLACE_TCP:
-  robot: R4
-  area: workbench2_area
-  action: wb2_place
-  position:
-  - -1.0
-  - 0.25
-  - 0.392
-  description: Handoff -> workbench 2 transfer - wb2 place TCP
-R4_WB2_PLACE_APP:
-  robot: R4
-  area: workbench2_area
-  action: wb2_place_approach
-  position:
-  - -1.0
-  - 0.25
-  - 0.48
-  description: Handoff -> workbench 2 transfer - wb2 place approach
-R5_HOME_REF:
-  robot: R5
-  area: r5_home
-  action: home
-  position:
-  - -1.55
-  - -0.2
-  - 0.7
-  description: Large device installation (PLC, power supply) home reference
-R5_PLC_PICK_TCP:
-  robot: R5
-  area: r5_basket_area
-  action: plc_pick
-  position:
-  - -1.255
-  - -0.55
-  - 0.30250000000000005
-  description: Large device installation (PLC, power supply) - plc pick TCP
-R5_PLC_PICK_APP:
-  robot: R5
-  area: r5_basket_area
-  action: plc_pick_approach
-  position:
-  - -1.255
-  - -0.55
-  - 0.42250000000000004
-  description: Large device installation (PLC, power supply) - plc pick approach
-R5_PLC_PLACE_TCP:
-  robot: R5
-  area: workbench2_area
-  action: plc_place
-  position:
-  - -1.153
-  - 0.1976
-  - 0.29760000000000003
-  description: Large device installation (PLC, power supply) - plc place TCP
-R5_PLC_PLACE_APP:
-  robot: R5
-  area: workbench2_area
-  action: plc_place_approach
-  position:
-  - -1.153
-  - 0.1976
-  - 0.4176
-  description: Large device installation (PLC, power supply) - plc place approach
-R5_PSU_PICK_TCP:
-  robot: R5
-  area: r5_basket_area
-  action: psu_pick
-  position:
-  - -1.145
-  - -0.55
-  - 0.33575000000000005
-  description: Large device installation (PLC, power supply) - psu pick TCP
-R5_PSU_PICK_APP:
-  robot: R5
-  area: r5_basket_area
-  action: psu_pick_approach
-  position:
-  - -1.145
-  - -0.55
-  - 0.45575000000000004
-  description: Large device installation (PLC, power supply) - psu pick approach
-R5_PSU_PLACE_TCP:
-  robot: R5
-  area: workbench2_area
-  action: psu_place
-  position:
-  - -1.3407
-  - 0.30285
-  - 0.33165
-  description: Large device installation (PLC, power supply) - psu place TCP
-R5_PSU_PLACE_APP:
-  robot: R5
-  area: workbench2_area
-  action: psu_place_approach
-  position:
-  - -1.3407
-  - 0.30285
-  - 0.45165
-  description: Large device installation (PLC, power supply) - psu place approach
-R6_HOME_REF:
-  robot: R6
-  area: r6_home
-  action: home
-  position:
-  - -0.6
-  - 0.35
-  - 0.7
-  description: Small device installation and staging transfer home reference
-R6_BREAKER_PICK_TCP:
-  robot: R6
-  area: r6_basket_area
-  action: breaker_pick
-  position:
-  - -0.25
-  - 0.75
-  - 0.30000000000000004
-  description: Small device installation and staging transfer - breaker pick TCP
-R6_BREAKER_PICK_APP:
-  robot: R6
-  area: r6_basket_area
-  action: breaker_pick_approach
-  position:
-  - -0.25
-  - 0.75
-  - 0.42000000000000004
-  description: Small device installation and staging transfer - breaker pick approach
-R6_BREAKER_PLACE_TCP:
-  robot: R6
-  area: workbench2_area
-  action: breaker_place
-  position:
-  - -1.06565
-  - 0.29415
-  - 0.28850000000000003
-  description: Small device installation and staging transfer - breaker place TCP
-R6_BREAKER_PLACE_APP:
-  robot: R6
-  area: workbench2_area
-  action: breaker_place_approach
-  position:
-  - -1.06565
-  - 0.29415
-  - 0.40850000000000003
-  description: Small device installation and staging transfer - breaker place approach
-R6_CONTACTOR_PICK_TCP:
-  robot: R6
-  area: r6_basket_area
-  action: contactor_pick
-  position:
-  - -0.29
-  - 0.75
-  - 0.30250000000000005
-  description: Small device installation and staging transfer - contactor pick TCP
-R6_CONTACTOR_PICK_APP:
-  robot: R6
-  area: r6_basket_area
-  action: contactor_pick_approach
-  position:
-  - -0.29
-  - 0.75
-  - 0.42250000000000004
-  description: Small device installation and staging transfer - contactor pick approach
-R6_CONTACTOR_PLACE_TCP:
-  robot: R6
-  area: workbench2_area
-  action: contactor_place
-  position:
-  - -1.09315
-  - 0.2939
-  - 0.29100000000000004
-  description: Small device installation and staging transfer - contactor place TCP
-R6_CONTACTOR_PLACE_APP:
-  robot: R6
-  area: workbench2_area
-  action: contactor_place_approach
-  position:
-  - -1.09315
-  - 0.2939
-  - 0.41100000000000003
-  description: Small device installation and staging transfer - contactor place approach
-R6_DMA_PICK_TCP:
-  robot: R6
-  area: r6_basket_area
-  action: dma_pick
-  position:
-  - -0.32
-  - 0.75
-  - 0.30675
-  description: Small device installation and staging transfer - dma pick TCP
-R6_DMA_PICK_APP:
-  robot: R6
-  area: r6_basket_area
-  action: dma_pick_approach
-  position:
-  - -0.32
-  - 0.75
-  - 0.42675
-  description: Small device installation and staging transfer - dma pick approach
-R6_DMA_PLACE_TCP:
-  robot: R6
-  area: workbench2_area
-  action: dma_place
-  position:
-  - -1.19625
-  - 0.30035
-  - 0.30185
-  description: Small device installation and staging transfer - dma place TCP
-R6_DMA_PLACE_APP:
-  robot: R6
-  area: workbench2_area
-  action: dma_place_approach
-  position:
-  - -1.19625
-  - 0.30035
-  - 0.42185
-  description: Small device installation and staging transfer - dma place approach
-R6_SERVO_PICK_TCP:
-  robot: R6
-  area: r6_basket_area
-  action: servo_pick
-  position:
-  - -0.36
-  - 0.75
-  - 0.34440000000000004
-  description: Small device installation and staging transfer - servo pick TCP
-R6_SERVO_PICK_APP:
-  robot: R6
-  area: r6_basket_area
-  action: servo_pick_approach
-  position:
-  - -0.36
-  - 0.75
-  - 0.46440000000000003
-  description: Small device installation and staging transfer - servo pick approach
-R6_SERVO_PLACE_TCP:
-  robot: R6
-  area: workbench2_area
-  action: servo_place
-  position:
-  - -1.2325
-  - 0.30315000000000003
-  - 0.3395
-  description: Small device installation and staging transfer - servo place TCP
-R6_SERVO_PLACE_APP:
-  robot: R6
-  area: workbench2_area
-  action: servo_place_approach
-  position:
-  - -1.2325
-  - 0.30315000000000003
-  - 0.4595
-  description: Small device installation and staging transfer - servo place approach
-R6_STAGING_PLACE_TCP:
-  robot: R6
-  area: staging_area
-  action: staging_place
-  position:
-  - 0.05
-  - 0.25
-  - 0.34095000000000003
-  description: Small device installation and staging transfer - staging place TCP
-R6_STAGING_PLACE_APP:
-  robot: R6
-  area: staging_area
-  action: staging_place_approach
-  position:
-  - 0.05
-  - 0.25
-  - 0.46095
-  description: Small device installation and staging transfer - staging place approach
-R6_WB2_PICK_TCP:
-  robot: R6
-  area: workbench2_area
-  action: wb2_pick
-  position:
-  - -1.2
-  - 0.25
-  - 0.34095000000000003
-  description: Small device installation and staging transfer - wb2 pick TCP
-R6_WB2_PICK_APP:
-  robot: R6
-  area: workbench2_area
-  action: wb2_pick_approach
-  position:
-  - -1.2
-  - 0.25
-  - 0.46095
-  description: Small device installation and staging transfer - wb2 pick approach
-R7_HOME_REF:
-  robot: R7
-  area: r7_home
-  action: home
-  position:
-  - 0.62
-  - 0.25
-  - 0.7
-  description: Shell top screw fastening (staging) home reference
+  - -3.2314499999999997
+  - 0.25125
+  - 0.39749999999999996
+  orientation_quaternion: *id008
+  description: R3 rail_place_b vertical APP; same XY/orientation as TCP
 R7_SCREW_1_TCP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_1
   position:
   - -0.1115
   - 0.365
-  - 0.41190000000000004
-  description: Shell top screw fastening (staging) - screw 1 TCP
+  - 0.41200000000000003
+  orientation_quaternion: &id009
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R7 screw_1 contact TCP
 R7_SCREW_1_APP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_1_approach
   position:
   - -0.1115
   - 0.365
-  - 0.49190000000000006
-  description: Shell top screw fastening (staging) - screw 1 approach
+  - 0.49200000000000005
+  orientation_quaternion: *id009
+  description: R7 screw_1 vertical APP; same XY/orientation as TCP
 R7_SCREW_2_TCP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_2
   position:
   - -0.1115
   - 0.135
-  - 0.41190000000000004
-  description: Shell top screw fastening (staging) - screw 2 TCP
+  - 0.41200000000000003
+  orientation_quaternion: &id010
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R7 screw_2 contact TCP
 R7_SCREW_2_APP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_2_approach
   position:
   - -0.1115
   - 0.135
-  - 0.49190000000000006
-  description: Shell top screw fastening (staging) - screw 2 approach
+  - 0.49200000000000005
+  orientation_quaternion: *id010
+  description: R7 screw_2 vertical APP; same XY/orientation as TCP
 R7_SCREW_3_TCP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_3
   position:
   - 0.21150000000000002
   - 0.365
-  - 0.41190000000000004
-  description: Shell top screw fastening (staging) - screw 3 TCP
+  - 0.41200000000000003
+  orientation_quaternion: &id011
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R7 screw_3 contact TCP
 R7_SCREW_3_APP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_3_approach
   position:
   - 0.21150000000000002
   - 0.365
-  - 0.49190000000000006
-  description: Shell top screw fastening (staging) - screw 3 approach
+  - 0.49200000000000005
+  orientation_quaternion: *id011
+  description: R7 screw_3 vertical APP; same XY/orientation as TCP
 R7_SCREW_4_TCP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_4
   position:
   - 0.21150000000000002
   - 0.135
-  - 0.41190000000000004
-  description: Shell top screw fastening (staging) - screw 4 TCP
+  - 0.41200000000000003
+  orientation_quaternion: &id012
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R7 screw_4 contact TCP
 R7_SCREW_4_APP:
   robot: R7
-  area: staging_area
+  area: public_workspace_3
   action: screw_4_approach
   position:
   - 0.21150000000000002
   - 0.135
-  - 0.49190000000000006
-  description: Shell top screw fastening (staging) - screw 4 approach
-R8_HOME_REF:
-  robot: R8
-  area: r8_home
-  action: home
+  - 0.49200000000000005
+  orientation_quaternion: *id012
+  description: R7 screw_4 vertical APP; same XY/orientation as TCP
+R4_PSU_PICK_TCP:
+  robot: R4
+  area: r4_device_supply_area
+  action: psu_pick
   position:
-  - 0.35
-  - -0.45
-  - 0.7
-  description: Finished product sorting (staging -> output conveyor) home reference
-R8_OUTPUT_PLACE_TCP:
-  robot: R8
-  area: finished_conveyor_area
-  action: output_place
+  - -1.69
+  - 1.12
+  - 0.33575
+  orientation_quaternion: &id013
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R4 psu_pick contact TCP
+R4_PSU_PICK_APP:
+  robot: R4
+  area: r4_device_supply_area
+  action: psu_pick_approach
   position:
-  - 0.3
-  - -0.92
-  - 0.34095000000000003
-  description: Finished product sorting (staging -> output conveyor) - output place
-    TCP
-R8_OUTPUT_PLACE_APP:
-  robot: R8
-  area: finished_conveyor_area
-  action: output_place_approach
+  - -1.69
+  - 1.12
+  - 0.45575
+  orientation_quaternion: *id013
+  description: R4 psu_pick vertical APP; same XY/orientation as TCP
+R4_PSU_PLACE_TCP:
+  robot: R4
+  area: public_workspace_2
+  action: psu_place
   position:
-  - 0.3
-  - -0.92
-  - 0.46095
-  description: Finished product sorting (staging -> output conveyor) - output place
-    approach
-R8_STAGING_PICK_TCP:
-  robot: R8
-  area: staging_area
-  action: staging_pick
+  - -1.3407
+  - 0.30285
+  - 0.33175
+  orientation_quaternion: &id014
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R4 psu_place contact TCP
+R4_PSU_PLACE_APP:
+  robot: R4
+  area: public_workspace_2
+  action: psu_place_approach
   position:
-  - 0.05
-  - 0.25
-  - 0.34095000000000003
-  description: Finished product sorting (staging -> output conveyor) - staging pick
-    TCP
-R8_STAGING_PICK_APP:
-  robot: R8
-  area: staging_area
-  action: staging_pick_approach
+  - -1.3407
+  - 0.30285
+  - 0.45175
+  orientation_quaternion: *id014
+  description: R4 psu_place vertical APP; same XY/orientation as TCP
+R4_SERVO_PICK_TCP:
+  robot: R4
+  area: r4_device_supply_area
+  action: servo_pick
   position:
-  - 0.05
-  - 0.25
-  - 0.46095
-  description: Finished product sorting (staging -> output conveyor) - staging pick
-    approach
+  - -1.58
+  - 1.12
+  - 0.34440000000000004
+  orientation_quaternion: &id015
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R4 servo_pick contact TCP
+R4_SERVO_PICK_APP:
+  robot: R4
+  area: r4_device_supply_area
+  action: servo_pick_approach
+  position:
+  - -1.58
+  - 1.12
+  - 0.46440000000000003
+  orientation_quaternion: *id015
+  description: R4 servo_pick vertical APP; same XY/orientation as TCP
+R4_SERVO_PLACE_TCP:
+  robot: R4
+  area: public_workspace_2
+  action: servo_place
+  position:
+  - -1.2325
+  - 0.30315000000000003
+  - 0.3396
+  orientation_quaternion: &id016
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R4 servo_place contact TCP
+R4_SERVO_PLACE_APP:
+  robot: R4
+  area: public_workspace_2
+  action: servo_place_approach
+  position:
+  - -1.2325
+  - 0.30315000000000003
+  - 0.4596
+  orientation_quaternion: *id016
+  description: R4 servo_place vertical APP; same XY/orientation as TCP
+R4_EDS_PICK_TCP:
+  robot: R4
+  area: r4_device_supply_area
+  action: eds_pick
+  position:
+  - -1.47
+  - 1.12
+  - 0.30665000000000003
+  orientation_quaternion: &id017
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R4 eds_pick contact TCP
+R4_EDS_PICK_APP:
+  robot: R4
+  area: r4_device_supply_area
+  action: eds_pick_approach
+  position:
+  - -1.47
+  - 1.12
+  - 0.42665000000000003
+  orientation_quaternion: *id017
+  description: R4 eds_pick vertical APP; same XY/orientation as TCP
+R4_EDS_PLACE_TCP:
+  robot: R4
+  area: public_workspace_2
+  action: eds_place
+  position:
+  - -1.37835
+  - 0.19085
+  - 0.29525
+  orientation_quaternion: &id018
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R4 eds_place contact TCP
+R4_EDS_PLACE_APP:
+  robot: R4
+  area: public_workspace_2
+  action: eds_place_approach
+  position:
+  - -1.37835
+  - 0.19085
+  - 0.41525
+  orientation_quaternion: *id018
+  description: R4 eds_place vertical APP; same XY/orientation as TCP
+R5_PLC_PICK_TCP:
+  robot: R5
+  area: r5_device_supply_area
+  action: plc_pick
+  position:
+  - -1.3200309746041894
+  - -0.6500054896086455
+  - 0.32197895000000004
+  orientation_quaternion: &id019
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R5 plc_pick contact TCP
+R5_PLC_PICK_APP:
+  robot: R5
+  area: r5_device_supply_area
+  action: plc_pick_approach
+  position:
+  - -1.3200309746041894
+  - -0.6500054896086455
+  - 0.44197895000000004
+  orientation_quaternion: *id019
+  description: R5 plc_pick vertical APP; same XY/orientation as TCP
+R5_PLC_PLACE_TCP:
+  robot: R5
+  area: public_workspace_2
+  action: plc_place
+  position:
+  - -1.1530309746041894
+  - 0.19759451039135456
+  - 0.31717895
+  orientation_quaternion: &id020
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R5 plc_place contact TCP
+R5_PLC_PLACE_APP:
+  robot: R5
+  area: public_workspace_2
+  action: plc_place_approach
+  position:
+  - -1.1530309746041894
+  - 0.19759451039135456
+  - 0.43717895
+  orientation_quaternion: *id020
+  description: R5 plc_place vertical APP; same XY/orientation as TCP
+R5_DMA_PICK_TCP:
+  robot: R5
+  area: r5_device_supply_area
+  action: dma_pick
+  position:
+  - -1.186018348302692
+  - -0.649967987498641
+  - 0.3295057
+  orientation_quaternion: &id021
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R5 dma_pick contact TCP
+R5_DMA_PICK_APP:
+  robot: R5
+  area: r5_device_supply_area
+  action: dma_pick_approach
+  position:
+  - -1.186018348302692
+  - -0.649967987498641
+  - 0.4495057
+  orientation_quaternion: *id021
+  description: R5 dma_pick vertical APP; same XY/orientation as TCP
+R5_DMA_PLACE_TCP:
+  robot: R5
+  area: public_workspace_2
+  action: dma_place
+  position:
+  - -1.2022683483026921
+  - 0.300382012501359
+  - 0.3247057
+  orientation_quaternion: &id022
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  description: R5 dma_place contact TCP
+R5_DMA_PLACE_APP:
+  robot: R5
+  area: public_workspace_2
+  action: dma_place_approach
+  position:
+  - -1.2022683483026921
+  - 0.300382012501359
+  - 0.4447057
+  orientation_quaternion: *id022
+  description: R5 dma_place vertical APP; same XY/orientation as TCP
+R6_CONTACTOR_PICK_TCP:
+  robot: R6
+  area: r6_device_supply_area
+  action: contactor_pick
+  position:
+  - -0.59
+  - -0.6199999999999999
+  - 0.30250000000000005
+  orientation_quaternion: &id023
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R6 contactor_pick contact TCP
+R6_CONTACTOR_PICK_APP:
+  robot: R6
+  area: r6_device_supply_area
+  action: contactor_pick_approach
+  position:
+  - -0.59
+  - -0.6199999999999999
+  - 0.42250000000000004
+  orientation_quaternion: *id023
+  description: R6 contactor_pick vertical APP; same XY/orientation as TCP
+R6_CONTACTOR_PLACE_TCP:
+  robot: R6
+  area: public_workspace_2
+  action: contactor_place
+  position:
+  - -0.9731500000000001
+  - 0.2939
+  - 0.2911
+  orientation_quaternion: &id024
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R6 contactor_place contact TCP
+R6_CONTACTOR_PLACE_APP:
+  robot: R6
+  area: public_workspace_2
+  action: contactor_place_approach
+  position:
+  - -0.9731500000000001
+  - 0.2939
+  - 0.4111
+  orientation_quaternion: *id024
+  description: R6 contactor_place vertical APP; same XY/orientation as TCP
+R6_BREAKER_PICK_TCP:
+  robot: R6
+  area: r6_device_supply_area
+  action: breaker_pick
+  position:
+  - -0.49
+  - -0.62
+  - 0.30000000000000004
+  orientation_quaternion: &id025
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R6 breaker_pick contact TCP
+R6_BREAKER_PICK_APP:
+  robot: R6
+  area: r6_device_supply_area
+  action: breaker_pick_approach
+  position:
+  - -0.49
+  - -0.62
+  - 0.42000000000000004
+  orientation_quaternion: *id025
+  description: R6 breaker_pick vertical APP; same XY/orientation as TCP
+R6_BREAKER_PLACE_TCP:
+  robot: R6
+  area: public_workspace_2
+  action: breaker_place
+  position:
+  - -0.9456500000000001
+  - 0.29415
+  - 0.2886
+  orientation_quaternion: &id026
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R6 breaker_place contact TCP
+R6_BREAKER_PLACE_APP:
+  robot: R6
+  area: public_workspace_2
+  action: breaker_place_approach
+  position:
+  - -0.9456500000000001
+  - 0.29415
+  - 0.4086
+  orientation_quaternion: *id026
+  description: R6 breaker_place vertical APP; same XY/orientation as TCP
+R6_COM5_PICK_TCP:
+  robot: R6
+  area: r6_device_supply_area
+  action: com5_pick
+  position:
+  - -0.39
+  - -0.62
+  - 0.28665
+  orientation_quaternion: &id027
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R6 com5_pick contact TCP
+R6_COM5_PICK_APP:
+  robot: R6
+  area: r6_device_supply_area
+  action: com5_pick_approach
+  position:
+  - -0.39
+  - -0.62
+  - 0.40665
+  orientation_quaternion: *id027
+  description: R6 com5_pick vertical APP; same XY/orientation as TCP
+R6_COM5_PLACE_TCP:
+  robot: R6
+  area: public_workspace_3
+  action: com5_place
+  position:
+  - 0.06855
+  - 0.19635
+  - 0.31475000000000003
+  orientation_quaternion: &id028
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R6 com5_place contact TCP
+R6_COM5_PLACE_APP:
+  robot: R6
+  area: public_workspace_3
+  action: com5_place_approach
+  position:
+  - 0.06855
+  - 0.19635
+  - 0.43475
+  orientation_quaternion: *id028
+  description: R6 com5_place vertical APP; same XY/orientation as TCP
+R8_FILTER_PICK_TCP:
+  robot: R8
+  area: public_workspace_3
+  action: filter_pick
+  position:
+  - 0.700019013941288
+  - -0.5000179847195745
+  - 0.29920571000000007
+  orientation_quaternion: &id029
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R8 filter_pick contact TCP
+R8_FILTER_PICK_APP:
+  robot: R8
+  area: public_workspace_3
+  action: filter_pick_approach
+  position:
+  - 0.700019013941288
+  - -0.5000179847195745
+  - 0.41920571000000006
+  orientation_quaternion: *id029
+  description: R8 filter_pick vertical APP; same XY/orientation as TCP
+R8_FILTER_PLACE_TCP:
+  robot: R8
+  area: public_workspace_3
+  action: filter_place
+  position:
+  - 0.22651901394128798
+  - 0.30313201528042555
+  - 0.29440571000000004
+  orientation_quaternion: &id030
+  - 0.7071067811865476
+  - 0.7071067811865476
+  - 0.0
+  - 0.0
+  description: R8 filter_place contact TCP
+R8_FILTER_PLACE_APP:
+  robot: R8
+  area: public_workspace_3
+  action: filter_place_approach
+  position:
+  - 0.22651901394128798
+  - 0.30313201528042555
+  - 0.41440571000000004
+  orientation_quaternion: *id030
+  description: R8 filter_place vertical APP; same XY/orientation as TCP

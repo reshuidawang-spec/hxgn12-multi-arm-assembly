@@ -7,14 +7,14 @@ Robot roots live at ``/R1`` ... ``/R8``; cell fixtures, parts and targets
 live below ``/FiveCR5A_Cell``.
 
 Line layout:
-    R1 cabinet shell feed (conveyor -> workbench 1)  gripper
-    R2 top plate install                             vacuum
-    R3 frame rail install x2 + handoff transfer      gripper
-    R4 handoff -> workbench 2 transfer               gripper
-    R5 large device install x2 (PLC, PSU)            vacuum
-    R6 small device install x4 + staging transfer    gripper
-    R7 top plate screw fastening (staging)           screwdriver
-    R8 finished product sorting (staging -> output)  gripper
+    R1 shell loading and pallet location             gripper
+    R2 horizontal rail installation                  magnetic pad
+    R3 two vertical rail installations               slim gripper
+    R4 PSU / servo / EDS installation                gripper
+    R5 PLC / DMA / filter installation               vacuum
+    R6 contactor / breaker / COM5 installation       gripper
+    R7 four-point internal fastening                 screwdriver
+    R8 door installation and latching                vacuum
 """
 
 from __future__ import annotations
@@ -26,8 +26,11 @@ ROBOT_IDS = tuple(f"R{index}" for index in range(1, 9))
 ARM_JOINT_ALIASES = tuple(f"joint{index}" for index in range(1, 7))
 
 ROBOT_ROOTS = {robot_id: f"/{robot_id}" for robot_id in ROBOT_IDS}
+# The detached /FiveCR5A_Cell/RobotBases/R*_Base discs were legacy visual
+# supports and are intentionally removed by the final scene builder.  Resolve
+# each robot's actual model-owned collision base instead.
 ROBOT_BASES = {
-    robot_id: f"{SCENE_ROOT}/RobotBases/{robot_id}_Base"
+    robot_id: f"/{robot_id}/base_link_respondable"
     for robot_id in ROBOT_IDS
 }
 ROBOT_TIPS = {
@@ -38,7 +41,7 @@ ROBOT_TIPS = {
     "R5": "R5_vacuum_tip",
     "R6": "R6_gripper_tip",
     "R7": "R7_tool_tip",
-    "R8": "R8_gripper_tip",
+    "R8": "R8_vacuum_tip",
 }
 ROBOT_TOOL_ROOTS = {
     robot_id: f"/{robot_id}/{robot_id}T" for robot_id in ROBOT_IDS
@@ -62,8 +65,6 @@ ROBOT_TARGET_NAMES = {
     ),
     "R3": (
         "R3_HOME_REF",
-        "R3_HANDOFF_PLACE_APP",
-        "R3_HANDOFF_PLACE_TCP",
         "R3_RAIL_PICK_A_APP",
         "R3_RAIL_PICK_A_TCP",
         "R3_RAIL_PICK_B_APP",
@@ -72,15 +73,15 @@ ROBOT_TARGET_NAMES = {
         "R3_RAIL_PLACE_A_TCP",
         "R3_RAIL_PLACE_B_APP",
         "R3_RAIL_PLACE_B_TCP",
-        "R3_WB1_PICK_APP",
-        "R3_WB1_PICK_TCP",
     ),
     "R4": (
         "R4_HOME_REF",
-        "R4_HANDOFF_PICK_APP",
-        "R4_HANDOFF_PICK_TCP",
-        "R4_WB2_PLACE_APP",
-        "R4_WB2_PLACE_TCP",
+        "R4_PSU_PICK_APP", "R4_PSU_PICK_TCP",
+        "R4_PSU_PLACE_APP", "R4_PSU_PLACE_TCP",
+        "R4_SERVO_PICK_APP", "R4_SERVO_PICK_TCP",
+        "R4_SERVO_PLACE_APP", "R4_SERVO_PLACE_TCP",
+        "R4_EDS_PICK_APP", "R4_EDS_PICK_TCP",
+        "R4_EDS_PLACE_APP", "R4_EDS_PLACE_TCP",
     ),
     "R5": (
         "R5_HOME_REF",
@@ -88,10 +89,10 @@ ROBOT_TARGET_NAMES = {
         "R5_PLC_PICK_TCP",
         "R5_PLC_PLACE_APP",
         "R5_PLC_PLACE_TCP",
-        "R5_PSU_PICK_APP",
-        "R5_PSU_PICK_TCP",
-        "R5_PSU_PLACE_APP",
-        "R5_PSU_PLACE_TCP",
+        "R5_DMA_PICK_APP", "R5_DMA_PICK_TCP",
+        "R5_DMA_PLACE_APP", "R5_DMA_PLACE_TCP",
+        "R5_FILTER_PICK_APP", "R5_FILTER_PICK_TCP",
+        "R5_FILTER_PLACE_APP", "R5_FILTER_PLACE_TCP",
     ),
     "R6": (
         "R6_HOME_REF",
@@ -103,18 +104,8 @@ ROBOT_TARGET_NAMES = {
         "R6_CONTACTOR_PICK_TCP",
         "R6_CONTACTOR_PLACE_APP",
         "R6_CONTACTOR_PLACE_TCP",
-        "R6_DMA_PICK_APP",
-        "R6_DMA_PICK_TCP",
-        "R6_DMA_PLACE_APP",
-        "R6_DMA_PLACE_TCP",
-        "R6_SERVO_PICK_APP",
-        "R6_SERVO_PICK_TCP",
-        "R6_SERVO_PLACE_APP",
-        "R6_SERVO_PLACE_TCP",
-        "R6_STAGING_PLACE_APP",
-        "R6_STAGING_PLACE_TCP",
-        "R6_WB2_PICK_APP",
-        "R6_WB2_PICK_TCP",
+        "R6_COM5_PICK_APP", "R6_COM5_PICK_TCP",
+        "R6_COM5_PLACE_APP", "R6_COM5_PLACE_TCP",
     ),
     "R7": (
         "R7_HOME_REF",
@@ -129,10 +120,9 @@ ROBOT_TARGET_NAMES = {
     ),
     "R8": (
         "R8_HOME_REF",
-        "R8_OUTPUT_PLACE_APP",
-        "R8_OUTPUT_PLACE_TCP",
-        "R8_STAGING_PICK_APP",
-        "R8_STAGING_PICK_TCP",
+        "R8_DOOR_PICK_APP", "R8_DOOR_PICK_TCP",
+        "R8_DOOR_PLACE_APP", "R8_DOOR_PLACE_TCP",
+        "R8_LATCH_APP", "R8_LATCH_TCP",
     ),
 }
 
@@ -160,8 +150,10 @@ PARTS = {
 BASKETS = {
     "R2_STAND": f"{SCENE_ROOT}/Baskets/R2_Stand",
     "R3_RAIL_RACK": f"{SCENE_ROOT}/Baskets/R3_Rail_Rack",
+    "R4_DEVICE": f"{SCENE_ROOT}/Baskets/R4_Device_Basket",
     "R5_DEVICE": f"{SCENE_ROOT}/Baskets/R5_Device_Basket",
     "R6_DEVICE": f"{SCENE_ROOT}/Baskets/R6_Device_Basket",
+    "R8_DOOR_SUPPLY": f"{SCENE_ROOT}/Baskets/R8_Door_Supply",
 }
 AREAS = {
     "WORKBENCH1": f"{SCENE_ROOT}/Areas/Workbench1_Area",

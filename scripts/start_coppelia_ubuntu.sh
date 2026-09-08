@@ -20,4 +20,7 @@ if [[ ! -f "${SCENE_PATH}" ]]; then
 fi
 
 cd "${COPPELIASIM_ROOT}"
-exec ./coppeliaSim.sh "${SCENE_PATH}"
+# Python Sandbox can wait on the ZMQ service before that service has entered
+# its add-on loop.  bareLua starts the built-in server without that bootstrap
+# dependency; the controller's stopped-state batch path is compatible with it.
+exec ./coppeliaSim.sh -GpreferredSandboxLang=bareLua "${SCENE_PATH}"

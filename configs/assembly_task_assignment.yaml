@@ -1,0 +1,111 @@
+schema_version: 2
+
+policy:
+  motion_planning_contract: configs/motion_planning_policy.yaml
+  transport: indexing_pallet_only
+  whole_cabinet_robot_transfer: false
+  wb1_interprocess_micro_index: {after: RAIL_PLACE_A, direction: +X, distance_m: 0.12}
+  wb2_interprocess_micro_index: {after: DMA_PLACE, direction: +X, distance_m: 0.12}
+  cabinet_pose: lying_open_up
+  preassembled_parts: [mounting_panel]
+  door_installation: false
+  shared_workspace_entry: single_robot_exclusive
+  parallelism: source_pick_and_prefetch_outside_workspace_only
+  installation_order: large_and_deep_parts_before_small_and_near_parts
+
+workspaces:
+  public_workspace_1:
+    center: [-3.15, 0.25]
+    members: [R1, R2, R3]
+    purpose: cabinet shell and rail foundation assembly
+  public_workspace_2:
+    center: [-1.20, 0.25]
+    members: [R4, R5, R6]
+    purpose: primary electrical-device installation
+  public_workspace_3:
+    center: [0.05, 0.25]
+    members: [R6, R7, R8]
+    purpose: final communication module and filter installation, then fastening
+
+tasks:
+  - id: shell_load_and_locate
+    robot: R1
+    workspace: public_workspace_1
+    operation: pick shell and locate it on the indexing pallet
+    actions: [SHELL_PICK, WB1_PLACE]
+    parts: [shell]
+    required_tool: gripper
+    after: []
+
+  - id: horizontal_rail_install
+    robot: R2
+    workspace: public_workspace_1
+    operation: magnetically pick and install the horizontal rail
+    actions: [RAIL_PICK_H, RAIL_PLACE_H]
+    parts: [rail_h1]
+    required_tool: magnetic_gripper
+    after: [shell_load_and_locate]
+
+  - id: vertical_rail_install
+    robot: R3
+    workspace: public_workspace_1
+    operation: sequentially pick and install both vertical rails
+    actions: [RAIL_PICK_A, RAIL_PLACE_A, RAIL_PICK_B, RAIL_PLACE_B]
+    parts: [rail_v1, rail_v2]
+    required_tool: slim_gripper
+    after: [horizontal_rail_install]
+
+  - id: power_and_drive_install
+    robot: R4
+    workspace: public_workspace_2
+    operation: side-clamp and install tall power and drive devices
+    actions: [PSU_PICK, PSU_PLACE, SERVO_PICK, SERVO_PLACE, EDS_PICK, EDS_PLACE]
+    parts: [psu, servo, eds]
+    required_tool: gripper
+    after: [vertical_rail_install]
+
+  - id: control_and_filter_install
+    robot: R5
+    workspace: public_workspace_2
+    operation: vacuum-pick and install control devices
+    actions: [PLC_PICK, PLC_PLACE, DMA_PICK, DMA_PLACE]
+    parts: [plc, dma]
+    required_tool: vacuum
+    after: [power_and_drive_install]
+
+  - id: switching_and_protection_install
+    robot: R6
+    workspace: public_workspace_2
+    operation: precision-grip and install switching/protection devices
+    actions: [CONTACTOR_PICK, CONTACTOR_PLACE, BREAKER_PICK, BREAKER_PLACE]
+    parts: [contactor, breaker]
+    required_tool: gripper
+    after: [control_and_filter_install]
+
+  - id: communication_module_install
+    robot: R6
+    workspace: public_workspace_3
+    operation: install the final compact communication module
+    actions: [COM5_PICK, COM5_PLACE]
+    parts: [com5]
+    required_tool: gripper
+    after: [switching_and_protection_install]
+
+  - id: filter_install
+    robot: R8
+    workspace: public_workspace_3
+    operation: vacuum-pick and install the filter in the open cabinet
+    actions: [FILTER_PICK, FILTER_PLACE]
+    parts: [filter]
+    required_tool: vacuum
+    after: [communication_module_install]
+
+  - id: four_point_fastening
+    robot: R7
+    workspace: public_workspace_3
+    operation: tighten the four internal mounting fasteners
+    actions: [SCREW_1, SCREW_2, SCREW_3, SCREW_4]
+    parts: []
+    fastener_points: 4
+    required_tool: screwdriver
+    after: [filter_install]

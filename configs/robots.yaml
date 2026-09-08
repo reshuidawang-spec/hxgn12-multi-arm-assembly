@@ -9,105 +9,113 @@
 
 robots:
   R1:
-    name: "Cabinet shell feed robot (conveyor -> workbench 1)"
+    name: "Cabinet shell loading and pallet-location robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [-3.55, 0.65, 0.19]
-    base_object: R1_Base
+    position: [-3.60, 0.75, 0.19]
+    base_object: /R1/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R1_HOME_REF
-    capabilities: [shell_feed, pick_and_place]
+    capabilities: [shell_load, pallet_locate, pick_and_place]
+    assigned_parts: [shell]
     end_effector: gripper
-    work_area: [cabinet_conveyor_area, workbench1_area]
+    work_area: [cabinet_conveyor_area, public_workspace_1]
     tip: R1_gripper_tip
 
   R2:
-    name: "Top plate installation robot"
+    name: "Horizontal rail magnetic-installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [-3.51, -0.22, 0.19]
-    base_object: R2_Base
+    position: [-3.07, -0.48, 0.19]
+    base_object: /R2/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R2_HOME_REF
-    capabilities: [plate_install, pick_and_place]
-    end_effector: vacuum
-    work_area: [r2_stand_area, workbench1_area]
+    capabilities: [horizontal_rail_install, magnetic_pick_and_place]
+    assigned_parts: [rail_h1]
+    end_effector: magnetic_gripper
+    work_area: [r2_stand_area, public_workspace_1]
     tip: R2_vacuum_tip
 
   R3:
-    name: "Frame rail installation and handoff transfer robot"
+    name: "Dual vertical-rail installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [-2.55, 0.40, 0.19]
-    base_object: R3_Base
+    position: [-2.75, -0.35, 0.19]
+    base_object: /R3/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R3_HOME_REF
-    capabilities: [rail_install, transfer_to_handoff, pick_and_place]
-    end_effector: gripper
-    work_area: [r3_rack_area, workbench1_area, handoff_area]
+    capabilities: [vertical_rail_install, precision_pick_and_place]
+    assigned_parts: [rail_v1, rail_v2]
+    end_effector: slim_gripper
+    work_area: [r3_rack_area, public_workspace_1]
     tip: R3_gripper_tip
 
   R4:
-    name: "Handoff -> workbench 2 transfer robot"
+    name: "Power and drive device installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [-1.60, 0.65, 0.19]
-    base_object: R4_Base
+    position: [-1.30, 0.70, 0.19]
+    base_object: /R4/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R4_HOME_REF
-    capabilities: [handoff_transfer, pick_and_place]
+    capabilities: [power_device_install, drive_device_install, pick_and_place]
+    assigned_parts: [psu, servo, eds]
     end_effector: gripper
-    work_area: [handoff_area, workbench2_area]
+    work_area: [public_workspace_2]
     tip: R4_gripper_tip
 
   R5:
-    name: "Large device installation robot (PLC, power supply)"
+    name: "Control and filter vacuum-installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
     position: [-1.56, -0.22, 0.19]
-    base_object: R5_Base
+    base_object: /R5/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R5_HOME_REF
-    capabilities: [device_install, pick_and_place]
+    capabilities: [control_device_install, filter_install, vacuum_pick_and_place]
+    assigned_parts: [plc, dma, filter]
     end_effector: vacuum
-    work_area: [r5_basket_area, workbench2_area]
+    work_area: [r5_basket_area, public_workspace_2]
     tip: R5_vacuum_tip
 
   R6:
-    name: "Small device installation and staging transfer robot"
+    name: "Switching, protection, and communication module robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [-0.60, 0.40, 0.19]
-    base_object: R6_Base
+    position: [-0.50, -0.08, 0.19]
+    base_object: /R6/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R6_HOME_REF
-    capabilities: [device_install, transfer_to_staging, pick_and_place]
+    capabilities: [switch_device_install, protection_device_install, communication_module_install, pick_and_place]
+    assigned_parts: [contactor, breaker, com5]
     end_effector: gripper
-    work_area: [r6_basket_area, workbench2_area, staging_area]
+    work_area: [r6_basket_area, public_workspace_2, public_workspace_3]
     tip: R6_gripper_tip
 
   R7:
-    name: "Top plate screw fastening robot (staging)"
+    name: "Four-point internal fastening robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [0.65, 0.25, 0.19]
-    base_object: R7_Base
+    position: [0.10, 0.75, 0.19]
+    base_object: /R7/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R7_HOME_REF
-    capabilities: [screw]
+    capabilities: [four_point_fastening, torque_control]
+    assigned_parts: []
     end_effector: screwdriver
-    work_area: [staging_area]
+    work_area: [public_workspace_3]
     tip: R7_tool_tip
 
   R8:
-    name: "Finished product sorting robot (staging -> output conveyor)"
+    name: "Cabinet door installation and latching robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [0.35, -0.50, 0.19]
-    base_object: R8_Base
+    position: [0.35, -0.22, 0.19]
+    base_object: /R8/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R8_HOME_REF
-    capabilities: [sort, pick_and_place]
-    end_effector: gripper
-    work_area: [staging_area, finished_conveyor_area]
-    tip: R8_gripper_tip
+    capabilities: [door_install, hinge_align, latch_close, vacuum_pick_and_place]
+    assigned_parts: [door]
+    end_effector: vacuum
+    work_area: [door_supply_area, public_workspace_3]
+    tip: R8_vacuum_tip

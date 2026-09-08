@@ -1,22 +1,31 @@
 counts:
   arm_joints_per_robot: 6
   active_robots: 8
-  cell_objects: 340
+  cell_objects: 343
   display_only_robots: 0
-  process_targets: 72
+  process_targets: 68
   robots: 8
-  target_tree_dummies: 81
+  target_tree_dummies: 77
 embedded_scripts: []
 notes:
 - 'Scene produced by scripts/rename_scene_robots.py, scripts/build_new_line_scene.py
   and scripts/build_cabinet_product_scene.py: real control-cabinet STL product at
-  50% scale, displayed as an OPEN-TOP box. Styled floor with station zones, robot
-  base pads and an amber flow path (conveyor -> WB1 -> handoff -> WB2 -> staging ->
-  finished belt -> finished bin); longer conveyors; Finished_Bin at the east belt
-  end; all eight robots verified at the scene root.'
+  50% scale, displayed as an OPEN-TOP box. The three obsolete 1.9 m round tables and
+  detached R1_Base..R8_Base discs are removed. Three shared workspaces are marked
+  along the unobstructed indexing conveyor: R1/R2/R3, R4/R5/R6, and R6/R7/R8. The
+  reference cabinet is on a compact display riser outside those workspaces. Task-owned
+  R4/R5/R6 device baskets and the R8 door supply are present; all 33 task actions
+  have paired vertical APP/TCP targets, and all eight robot roots are clear of the
+  conveyor.'
+- After R3 installs vertical rail A at WB1, the pallet and assembly advance 0.12 m
+  along world +X to wb1_micro before rail B; the R3-B APP/TCP pair includes the same
+  offset.
+- After R5 installs Filter at WB2, the pallet and assembly advance 0.12 m along world
+  +X to wb2_micro before R6 installs Contactor and Breaker; both placement APP/TCP
+  pairs include the same offset. R6 then installs COM5 at staging.
 scene:
   file: compact_cell.ttt
   root: /FiveCR5A_Cell
-  sha256: 1edc383e7274bb9bfe56928617d6e20e01a45b1bdd0c10be7fc2ff476c885b7b
-  size: 8132526
+  sha256: 06fca91b8c4e369a285092792b2c5b1af727a1501b068f3aefd30c0d3b41ebdb
+  size: 8606941
 schema_version: 1
