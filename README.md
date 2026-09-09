@@ -2,26 +2,26 @@
 ## 面向多工艺柔性产线的多机械臂自主调度与效能优化系统
 
 > CR5 Assembly Team — 江科大学生参赛项目仓库
-> 当前主线统一为：**八台 DOBOT CR5A（R1–R8）+ HXGN-12 高压控制柜装配 + 多订单生产工作流**（真实柜体 STL 50% 缩比、14 个零件、74 个 PARK/APP/TCP 规划点）。
+> 当前主线统一为：**八台 DOBOT CR5A（R1–R8）+ 电控柜装配 + 多订单生产工作流**（真实柜体 STL 50% 缩比、14 个零件，含预装内安装板；30个动作、68个 PARK/APP/TCP 规划点；不装柜门）。
 > 早期五臂电控箱方案的历史模块与文档仍保留在仓库中（见「历史内容说明」）。
 
 ---
 
 ## 1. 当前项目状态
 
-**最新阻断（2026-09-08）：** 进一步三角网格审计发现当前 `cabinet_front_up_v1` 实际仍是背板朝上，阻挡 R2 安装；标作门板的原 CAD 零件更符合内安装板，需确认零件身份并补齐正确柜门定义。运行器已加入开口面强校验，在此问题修正前拒绝规划/回放。下方“姿态已修正”等阶段记录不作为验收结论。
+**当前版本：** 用户确认无柜门流程，已保存 `cabinet_open_up_v2` 开口朝上场景，30动作/68规划点、schema36。内安装板作为柜壳预装件；R8改装滤波器，R7在全部安装完成后锁紧。真实开口检查通过，逐臂路径重建与验收仍在进行；旧34/35路径不得直接播放。下方旧柜门、33动作及旧回放描述仅为历史记录。
 
 2026-09-08 审计纠正：旧版将形状包围盒坐标系误当作网格坐标系，导致真实柜壳/门板朝向与代理不一致。旧版 33/33 通过记录不能用于整线验收。目前已改为背面朝托盘、柜门开口朝上，正在按真实几何逐臂重规划；尚未完成整线验收。
 
 | 部分 | 当前内容 | 状态 |
 |---|---|---|
-| 8 臂 CoppeliaSim 场景 | `scenes/compact_cell.ttt`：8 台 CR5A、中央索引输送线、三个公共区、74 个规划点 | 无旧圆盘；真实网格姿态已修正，逐臂验证中 |
+| 8 臂 CoppeliaSim 场景 | `scenes/compact_cell.ttt`：8 台 CR5A、中央索引输送线、三个公共区、68 个规划点 | 真正开口朝上，无旧圆盘、无装门流程；逐臂验证中 |
 | 工艺自动拆解 | `test/decompose_assembly.py`：STL 解析 → 接触图 → 装配顺序 DAG → 工艺分类 → 8 臂能力映射（输入一个装配好的柜体模型，输出工艺链 JSON） | MVP 已可用（含 tkinter 界面 `test/import_cabinet_ui.py`） |
 | 运动规划与执行 | `configs/motion_planning_policy.yaml` + `scripts/run_8arm_cabinet_assembly.py`：竖直 Π 形模板 → 分级回退 → 机间碰撞预检 → 确定性步进回放 | 按真实柜壳检查碰撞、实际抓取接触及释放误差；重验证中 |
-| 固定路径数据 | `data/fixed_paths/eight_arm_cabinet.json`（历史正式计划）与 `.partial.json`（新检查点） | 当前规划器要求 schema 35；旧 schema 34 不可直接执行 |
+| 固定路径数据 | `data/fixed_paths/eight_arm_cabinet.json`（历史正式计划）与 `.partial.json`（新检查点） | 当前规划器要求 schema 36；旧 schema 34/35 不可直接执行 |
 | 调度与编排 | `scheduler/`（订单解析、动态订单窗口、前后段重叠流水）+ `orchestration/cell_orchestrator.py` | 沿自五臂阶段，适配 8 臂中 |
 
-机械臂分工（工艺拆解 MVP 的初始能力映射，权威分工见 `test/process_chain_hxgn.json` 与场景目标点）：
+机械臂分工（当前权威分工见 `configs/assembly_task_assignment.yaml` 与场景目标点）：
 
 | 资源 | 任务 |
 |---|---|
@@ -29,18 +29,18 @@
 | R2 | 磁吸安装横轨 |
 | R3 | 夹持安装两根竖轨 |
 | R4 | 安装 PSU、Servo、EDS |
-| R5 | 吸附安装 PLC、DMA、Filter |
-| R6 | 安装 Contactor、Breaker、COM5（跨公共区2/3） |
-| R7 | 四点内装锁紧 |
-| R8 | 柜门安装、铰链对准和闭锁 |
+| R5 | 吸附安装 PLC、DMA |
+| R6 | 在公共区 2 安装 Contactor、Breaker |
+| R7 | 所有器件装好后的四点锁紧动作（运动仿真，不代表定扭验收） |
+| R8 | 在公共区 3 吸附安装 COM5、Filter，先于 R7 执行 |
 
 所有新路径必须遵守 `vertical_pi_transfer_v1`：末端物理轴朝世界 `-Z`，按 PARK/高位/APP/TCP 完成抓取、抬升、平移、下探和释放；回退顺序固定为“直接 Π 形 → 抬高 → 单侧高位绕点 → 替代 IK 分支 → 受约束 OMPL”。三个公共区执行单机械臂互斥，只有公共区外的取料/预取可以并行。策略文件指纹写入路径文件，策略一旦修改，旧路径自动失效。
 
 WB1 内采用一次短距离工艺步进：R3 安装竖轨 A 后，八臂必须全部回到 PARK，托盘和已装箱体沿输送方向 `+X` 移动 120 mm，再执行竖轨 B。R3-B 的 APP/TCP 和装配基准同步使用 `wb1_micro`，不是仅移动视觉模型。
 
-WB2 同样采用一次 120 mm 工艺步进：R5 安装 Filter 后，八臂回到 PARK，托盘由 `wb2` 沿 `+X` 移到 `wb2_micro`，再由 R6 安装 Contactor 与 Breaker。随后托盘进入 staging，R6 以 0.48 m 高位走廊安装 COM5。
+WB2 同样采用一次 120 mm 工艺步进：R5 安装 DMA 后，八臂回到 PARK，托盘由 `wb2` 沿 `+X` 移到 `wb2_micro`，再由 R6 安装 Contactor 与 Breaker。随后托盘进入 staging，R8 使用小型真空吸具依次安装 COM5 与 Filter，最后 R7 锁紧。
 
-R7 完成四点锁紧后，R8 以真空吸盘抓取柜门。柜门采用前向肘部支路，先垂直回升到抓取 APP，再在 `z=0.50 m` 经一个底座外缘高位点绕开自身 Link2，随后平移至安装 APP、垂直下探完成铰链对位和闭锁。直线路径会横穿 R8 底座，因此该单拐点是当前场景的最小可行绕行。
+柜体由 R1 上料后始终开口朝上，仅由托盘沿输送线移动。R8 使用12mm单吸盘从真实平面抓取滤波器，不再执行装门、闭锁或整柜搬运。
 
 STL 导入后保留真实网格世界姿态并统一形状坐标原点，通过三角形顶点检查世界包围盒，不再根据独立包围盒轴系猜测旋转。柜壳直接使用真实三角网格做碰撞检查；其他器件的代理与真实 CAD 坐标一致。参考成品改用不可见基准点，机器人重复显示的碰撞网格已隐藏但仍参与碰撞检测。下文涉及旧回放结果及固定路径数值的历史说明须以新审计报告为准。
 
@@ -83,7 +83,7 @@ python3 scripts/run_8arm_cabinet_assembly.py \
 python3 scripts/run_8arm_cabinet_assembly.py \
   --plan data/fixed_paths/eight_arm_cabinet.partial.json --preflight-r5
 
-# 累计审计到 R6（含 WB2 微移、Contactor/Breaker、转入 staging 与 COM5）
+# 累计审计到 R6（含 WB2 微移、Contactor/Breaker，并转入 staging）
 python3 scripts/run_8arm_cabinet_assembly.py \
   --plan data/fixed_paths/eight_arm_cabinet.partial.json --preflight-r6
 

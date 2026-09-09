@@ -1,0 +1,14 @@
+{
+  "through": "R2",
+  "passed": true,
+  "completed": [
+    "R1_SHELL_PICK",
+    "R1_WB1_PLACE",
+    "R2_RAIL_PICK_H",
+    "R2_RAIL_PLACE_H"
+  ],
+  "scene": {
+    "size": 8606937,
+    "sha256": "1da337c38f23a083c5480fbc9eba3009c539536512c34b2b3cbed4b755118fa3"
+  }
+}

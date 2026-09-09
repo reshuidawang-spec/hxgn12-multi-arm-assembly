@@ -9,6 +9,7 @@ policy:
   cabinet_pose: lying_open_up
   preassembled_parts: [mounting_panel]
   door_installation: false
+  execution_mode: sequential_validated_actions
   shared_workspace_entry: single_robot_exclusive
   parallelism: source_pick_and_prefetch_outside_workspace_only
   installation_order: large_and_deep_parts_before_small_and_near_parts
@@ -52,7 +53,7 @@ tasks:
     operation: sequentially pick and install both vertical rails
     actions: [RAIL_PICK_A, RAIL_PLACE_A, RAIL_PICK_B, RAIL_PLACE_B]
     parts: [rail_v1, rail_v2]
-    required_tool: slim_gripper
+    required_tool: magnetic_gripper
     after: [horizontal_rail_install]
 
   - id: power_and_drive_install
@@ -83,12 +84,12 @@ tasks:
     after: [control_and_filter_install]
 
   - id: communication_module_install
-    robot: R6
+    robot: R8
     workspace: public_workspace_3
     operation: install the final compact communication module
     actions: [COM5_PICK, COM5_PLACE]
     parts: [com5]
-    required_tool: gripper
+    required_tool: vacuum
     after: [switching_and_protection_install]
 
   - id: filter_install

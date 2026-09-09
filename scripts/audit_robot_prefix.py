@@ -69,7 +69,8 @@ def main():
         plan['actions']={r:plan['actions'][r] for r in robots}
         a.plan.write_text(json.dumps(plan,indent=2)+'\n')
     report={'through':a.through,'passed':True,'completed':completed,'scene':fingerprint(SCENE_FILE)}
-    out=Path('data/audits/20260908_geometry')/f'prefix_{a.through}.json'
+    out=Path('data/audits/open_top_no_door_v2')/f'prefix_{a.through}.json'
+    out.parent.mkdir(parents=True,exist_ok=True)
     out.write_text(json.dumps(report,indent=2)+'\n')
     print(f'[passed] R1..{a.through}: {len(completed)} actions, real shell and release-pose checks',flush=True)
 

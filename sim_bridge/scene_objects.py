@@ -11,10 +11,10 @@ Line layout:
     R2 horizontal rail installation                  magnetic pad
     R3 two vertical rail installations               slim gripper
     R4 PSU / servo / EDS installation                gripper
-    R5 PLC / DMA / filter installation               vacuum
+    R5 PLC / DMA installation                        vacuum
     R6 contactor / breaker / COM5 installation       gripper
     R7 four-point internal fastening                 screwdriver
-    R8 door installation and latching                vacuum
+    R8 filter installation (before R7 fastening)     vacuum
 """
 
 from __future__ import annotations
@@ -91,8 +91,6 @@ ROBOT_TARGET_NAMES = {
         "R5_PLC_PLACE_TCP",
         "R5_DMA_PICK_APP", "R5_DMA_PICK_TCP",
         "R5_DMA_PLACE_APP", "R5_DMA_PLACE_TCP",
-        "R5_FILTER_PICK_APP", "R5_FILTER_PICK_TCP",
-        "R5_FILTER_PLACE_APP", "R5_FILTER_PLACE_TCP",
     ),
     "R6": (
         "R6_HOME_REF",
@@ -104,8 +102,6 @@ ROBOT_TARGET_NAMES = {
         "R6_CONTACTOR_PICK_TCP",
         "R6_CONTACTOR_PLACE_APP",
         "R6_CONTACTOR_PLACE_TCP",
-        "R6_COM5_PICK_APP", "R6_COM5_PICK_TCP",
-        "R6_COM5_PLACE_APP", "R6_COM5_PLACE_TCP",
     ),
     "R7": (
         "R7_HOME_REF",
@@ -120,9 +116,10 @@ ROBOT_TARGET_NAMES = {
     ),
     "R8": (
         "R8_HOME_REF",
-        "R8_DOOR_PICK_APP", "R8_DOOR_PICK_TCP",
-        "R8_DOOR_PLACE_APP", "R8_DOOR_PLACE_TCP",
-        "R8_LATCH_APP", "R8_LATCH_TCP",
+        "R8_COM5_PICK_APP", "R8_COM5_PICK_TCP",
+        "R8_COM5_PLACE_APP", "R8_COM5_PLACE_TCP",
+        "R8_FILTER_PICK_APP", "R8_FILTER_PICK_TCP",
+        "R8_FILTER_PLACE_APP", "R8_FILTER_PLACE_TCP",
     ),
 }
 
@@ -153,7 +150,7 @@ BASKETS = {
     "R4_DEVICE": f"{SCENE_ROOT}/Baskets/R4_Device_Basket",
     "R5_DEVICE": f"{SCENE_ROOT}/Baskets/R5_Device_Basket",
     "R6_DEVICE": f"{SCENE_ROOT}/Baskets/R6_Device_Basket",
-    "R8_DOOR_SUPPLY": f"{SCENE_ROOT}/Baskets/R8_Door_Supply",
+    "R8_DEVICE_SUPPLY": f"{SCENE_ROOT}/Baskets/R8_Device_Basket",
 }
 AREAS = {
     "WORKBENCH1": f"{SCENE_ROOT}/Areas/Workbench1_Area",

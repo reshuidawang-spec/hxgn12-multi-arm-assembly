@@ -14,7 +14,7 @@ This script:
        control/filter, R6 switch/communication and R8 door supply) plus a
        fully assembled reference cabinet on an out-of-process display riser;
     4. removes the obsolete round tables and detached robot-base discs, then
-       marks three shared workspaces along the indexing conveyor;
+       builds one aligned square pedestal below every robot;
     5. creates every task-owned APP/TCP pair for the 8-robot assembly flow;
     6. saves the scene.
 """
@@ -79,7 +79,9 @@ R2_RAIL_GRIP_OFFSET_X = 0.140
 R2_TRANSPORT_TCP_Z = 0.500
 R2_MAGNET_DIAMETER = 0.014
 R2_MAGNET_THICKNESS = 0.006
-R2_MAGNET_COMPRESSION = 0.001
+# The rail floor is only 0.5 mm thick. A magnet is not a compliant suction
+# cup: 1 mm penetration would pass through the rail into its mounting panel.
+R2_MAGNET_COMPRESSION = 0.0001
 # Calibrated from the real magnetic grasp transform so the rail reaches its
 # reference assembly pose without a release-time snap.
 R2_RAIL_PLACE_TCP_POSITION = (-3.010146121109595, 0.24994297146556427, 0.3164417337761357)
@@ -128,6 +130,9 @@ COLOR_FLOOR_ZONE_FEED = [0.42, 0.47, 0.56]
 COLOR_FLOOR_PATH = [0.95, 0.78, 0.20]
 COLOR_FLOOR_PAD = [0.24, 0.26, 0.29]
 COLOR_FLOOR_BORDER = [0.58, 0.58, 0.58]
+COLOR_ROBOT_PEDESTAL = [0.03, 0.03, 0.03]
+ROBOT_PEDESTAL_SIZE = (0.22, 0.22)
+FLOOR_TOP_Z = 0.0
 
 PUBLIC_WORKSPACES = (
     ("Public_Workspace_1", (-3.15, 0.25), (1.55, 1.50), ("R1", "R2", "R3"), [0.42, 0.52, 0.62]),
@@ -146,7 +151,10 @@ FLOOR_ZONES = [
 ROBOT_BASE_POSITIONS = {
     "R1": (-3.60, 0.75),
     "R2": (-3.07, -0.48),
-    "R3": (-2.75, -0.35),
+    # Base scan against all four vertical-rail APP/TCP pairs: y=-0.15 is the
+    # nearest position that keeps both rack picks and both WB1 placements on
+    # collision-free vertical-down branches.
+    "R3": (-2.75, -0.15),
     # The northeast offset keeps the complete cabinet south/west of R4's
     # Link2 while preserving paired down-facing reach to handoff and WB2.
     # At (-1.50, 0.55) the cabinet occupied Link2's sweep for 88 frames;
@@ -170,49 +178,48 @@ FLOW_PATH = [
 
 
 def build_floor(sim) -> int:
-    """Rebuild the ground as a styled floor adapted to the new line."""
-    import math
-
+    """Build one uniform floor without overlapping coloured overlays."""
     ground_group = _ensure_group(sim, f"{SCENE_ROOT}/Ground_Group", "Ground_Group")
+    _remove_children(sim, f"{SCENE_ROOT}/Ground_Group")
     cx, cy = FLOOR_CENTER
     length, width = FLOOR_SIZE
-    created = 0
-
     _cuboid(sim, (length, width, 0.02), (cx, cy, -0.01), "Ground", ground_group, COLOR_FLOOR_BASE)
-    created += 1
-    border_h = 0.008
-    border_w = 0.08
-    _cuboid(sim, (length, border_w, border_h), (cx, cy - width / 2 + border_w / 2, border_h / 2), "Floor_Border_S", ground_group, COLOR_FLOOR_BORDER)
-    _cuboid(sim, (length, border_w, border_h), (cx, cy + width / 2 - border_w / 2, border_h / 2), "Floor_Border_N", ground_group, COLOR_FLOOR_BORDER)
-    _cuboid(sim, (border_w, width, border_h), (cx - length / 2 + border_w / 2, cy, border_h / 2), "Floor_Border_W", ground_group, COLOR_FLOOR_BORDER)
-    _cuboid(sim, (border_w, width, border_h), (cx + length / 2 - border_w / 2, cy, border_h / 2), "Floor_Border_E", ground_group, COLOR_FLOOR_BORDER)
-    created += 4
+    return 1
 
-    for (zx, zy), (zl, zw), color, alias in FLOOR_ZONES:
-        _cuboid(sim, (zl, zw, 0.006), (zx, zy, 0.003), alias, ground_group, color)
-        created += 1
 
-    for robot_id, (px, py) in ROBOT_BASE_POSITIONS.items():
-        _cuboid(sim, (0.34, 0.34, 0.006), (px, py, 0.003), f"Floor_Pad_{robot_id}", ground_group, COLOR_FLOOR_PAD)
+def build_robot_pedestals(sim) -> int:
+    """Fill the exact gap between the floor and each model-owned base link."""
+    ground_group = _ensure_group(sim, f"{SCENE_ROOT}/Ground_Group", "Ground_Group")
+    created = 0
+    for robot_id, (x, y) in ROBOT_BASE_POSITIONS.items():
+        base = int(sim.getObject(f"/{robot_id}/base_link_respondable"))
+        base_z = float(sim.getObjectPosition(base, -1)[2])
+        local_min_z = float(
+            sim.getObjectFloatParam(base, sim.objfloatparam_objbbox_min_z)
+        )
+        base_bottom_z = base_z + local_min_z
+        height = base_bottom_z - FLOOR_TOP_Z
+        if height <= 0.0:
+            raise RuntimeError(
+                f"{robot_id} base bottom {base_bottom_z:.6f} is below the floor"
+            )
+        pedestal = _cuboid(
+            sim,
+            (*ROBOT_PEDESTAL_SIZE, height),
+            (x, y, FLOOR_TOP_Z + height / 2.0),
+            f"Robot_Pedestal_{robot_id}",
+            ground_group,
+            COLOR_ROBOT_PEDESTAL,
+        )
+        # Robot kinematics are fixed at the scene root.  The pedestal is a
+        # visual/static support and must not introduce a new collision into
+        # previously accepted arm paths.
+        sim.setObjectSpecialProperty(
+            pedestal,
+            sim.objectspecialproperty_renderable
+            | sim.objectspecialproperty_measurable,
+        )
         created += 1
-
-    for start, end in zip(FLOW_PATH, FLOW_PATH[1:]):
-        dx, dy = end[0] - start[0], end[1] - start[1]
-        length_seg = math.hypot(dx, dy)
-        angle = math.degrees(math.atan2(dy, dx))
-        mid = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
-        handle = _cuboid(sim, (length_seg - 0.10, 0.08, 0.006), (*mid, 0.005), "Floor_Path_Seg", ground_group, COLOR_FLOOR_PATH)
-        sim.setObjectOrientation(handle, -1, [0.0, 0.0, angle])
-        created += 1
-    # chevron arrows at every second segment midpoint
-    for start, end in zip(FLOW_PATH[1:-1], FLOW_PATH[2:]):
-        dx, dy = end[0] - start[0], end[1] - start[1]
-        angle = math.degrees(math.atan2(dy, dx))
-        mid = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
-        for side in (-1, 1):
-            handle = _cuboid(sim, (0.26, 0.045, 0.006), (*mid, 0.005), "Floor_Path_Arrow", ground_group, COLOR_FLOOR_PATH)
-            sim.setObjectOrientation(handle, -1, [0.0, 0.0, angle + side * 38.0])
-        created += 2
     return created
 
 
@@ -227,6 +234,17 @@ def position_robot_bases(sim) -> int:
     return positioned
 
 
+def reset_robot_joint_states(sim) -> int:
+    """Make scene rebuilds independent of the planner's last failed pose."""
+    reset = 0
+    for robot_id in ROBOT_BASE_POSITIONS:
+        root = int(sim.getObject(f"/{robot_id}"))
+        for joint in sim.getObjectsInTree(root, sim.object_joint_type, 0):
+            sim.setJointPosition(int(joint), 0.0)
+            reset += 1
+    return reset
+
+
 def configure_r2_magnetic_pad(sim) -> int:
     """Replace R2's visual TCP cube with a real narrow-rail magnetic pad.
 
@@ -239,7 +257,7 @@ def configure_r2_magnetic_pad(sim) -> int:
     """
     # Remove the legacy four-cup carrier as well as its TCP marker. Keeping
     # those cups made the nominal narrow magnet collide with the cabinet.
-    configure_compact_axial_tool(sim, 'R2', magnetic=True)
+    configure_compact_axial_tool(sim, 'R2', magnetic=True, contact=False)
     robot = int(sim.getObject("/R2"))
     tool_tcp = -1
     stale: list[int] = []
@@ -336,6 +354,86 @@ def configure_r3_slim_rail_fingers(sim) -> int:
     return updated
 
 
+def configure_slim_device_fingers(sim, robot_id: str) -> int:
+    """Fit a device gripper's physical fingers beside its DIN rail.
+
+    The stock pads are 18 x 26.4 x 66 mm while EDS is only 12.5 x 55.3 x
+    49.3 mm.  With R4 vertical-down, the pad's local Y is the horizontal
+    closing-axis thickness.  The EDS-to-rail gap is about 8.1 mm, so every
+    member at the fingertip must use the same 6 mm slim-device thickness as
+    the controller's jaw-centre calculation.  A compact 10 x 6 x 35 mm pad
+    still provides a physical bilateral contact surface.
+    """
+    robot = int(sim.getObject(f"/{robot_id}"))
+    by_alias = {
+        str(sim.getObjectAlias(handle, 0)): int(handle)
+        for handle in _tree(sim, robot)
+    }
+    # The legacy TCP cube is only a visual marker.  Explicit tool-tree
+    # collision collections nevertheless treat it as solid geometry, which
+    # makes side-grasping a low-profile device on a support impossible.
+    marker = by_alias.get(f"{robot_id}T_tcp_marker")
+    if marker is not None:
+        sim.removeObjects([marker])
+        by_alias.pop(f"{robot_id}T_tcp_marker")
+        updated = 1
+    else:
+        updated = 0
+    desired_sizes = {
+        f"{robot_id}T_left_upper_integrated_finger": (None, 0.006, 0.008),
+        f"{robot_id}T_left_lower_integrated_finger": (None, 0.006, 0.008),
+        f"{robot_id}T_right_upper_integrated_finger": (None, 0.006, 0.008),
+        f"{robot_id}T_right_lower_integrated_finger": (None, 0.006, 0.008),
+        f"{robot_id}T_left_front_vertical_jaw": (None, 0.006, 0.060),
+        f"{robot_id}T_right_front_vertical_jaw": (None, 0.006, 0.060),
+        f"{robot_id}T_left_inner_rubber_pad": (0.010, 0.006, 0.035),
+        f"{robot_id}T_right_inner_rubber_pad": (0.010, 0.006, 0.035),
+        f"{robot_id}T_left_screw_1": (None, 0.004, None),
+        f"{robot_id}T_left_screw_2": (None, 0.004, None),
+        f"{robot_id}T_right_screw_1": (None, 0.004, None),
+        f"{robot_id}T_right_screw_2": (None, 0.004, None),
+    }
+    for alias, (desired_x, desired_y, desired_z) in desired_sizes.items():
+        handle = by_alias[alias]
+        size, _ = sim.getShapeBB(handle)
+        scale_x = desired_x / float(size[0]) if desired_x is not None else 1.0
+        scale_y = desired_y / float(size[1])
+        scale_z = desired_z / float(size[2]) if desired_z is not None else 1.0
+        if (
+            abs(scale_x - 1.0) > 1e-5
+            or abs(scale_y - 1.0) > 1e-5
+            or abs(scale_z - 1.0) > 1e-5
+        ):
+            sim.scaleObject(handle, scale_x, scale_y, scale_z, 0)
+            updated += 1
+    # A failed loaded-device plan can leave the movable finger links at the
+    # last tested closed gap.  Rebuilds must always save the neutral 190 mm
+    # opening; runtime closes them to the part-specific gap at pick TCP.
+    tool = by_alias[f"{robot_id}T"]
+    for alias, sign in (
+        (f"{robot_id}T_left_finger_link", 1.0),
+        (f"{robot_id}T_right_finger_link", -1.0),
+    ):
+        handle = by_alias[alias]
+        position = list(sim.getObjectPosition(handle, tool))
+        position[1] = sign * 0.095
+        sim.setObjectPosition(handle, tool, position)
+    return updated
+
+
+def remove_visual_tcp_marker(sim, robot_id: str) -> int:
+    """Remove a decorative TCP cube from explicit tool collision trees."""
+    robot = int(sim.getObject(f"/{robot_id}"))
+    markers = [
+        int(handle)
+        for handle in _tree(sim, robot)
+        if str(sim.getObjectAlias(handle, 0)) == f"{robot_id}T_tcp_marker"
+    ]
+    if markers:
+        sim.removeObjects(markers)
+    return len(markers)
+
+
 def configure_r8_vacuum_tool(sim) -> int:
     """Replace R8's parallel fingers with a 50 mm door vacuum cup.
 
@@ -418,11 +516,12 @@ def configure_r5_vacuum_tool(sim) -> int:
     return configure_compact_axial_tool(sim, 'R5')
 
 
-def configure_compact_axial_tool(sim, robot_id: str, magnetic: bool=False) -> int:
+def configure_compact_axial_tool(sim, robot_id: str, magnetic: bool=False,
+                                 tip_alias: str | None=None, contact: bool=True) -> int:
     """Preserve TCP frames; replace oversized carrier with a narrow tool."""
     robot = int(sim.getObject('/'+robot_id))
     aliases = {sim.getObjectAlias(h,0): int(h) for h in _tree(sim,robot)}
-    root, tip = aliases[robot_id+'T'], aliases[robot_id+'_vacuum_tip']
+    root, tip = aliases[robot_id+'T'], aliases[tip_alias or robot_id+'_vacuum_tip']
     keep = {root,tip}
     h = tip
     while h != root:
@@ -442,8 +541,9 @@ def configure_compact_axial_tool(sim, robot_id: str, magnetic: bool=False) -> in
     q /= np.linalg.norm(q)
     specs = [(robot_id+'T_body',.012 if magnetic else .018,.014,.013),
              (robot_id+'T_shaft',.010,length-.020,(length+.020)/2)]
-    if not magnetic:
-        specs.append((robot_id+'T_vacuum_cup',.012,.006,.003))
+    if contact:
+        specs.append((robot_id+('T_magnetic_pad' if magnetic else 'T_vacuum_cup'),
+                      .012,.002 if magnetic else .006,.001 if magnetic else .003))
     for alias, diameter, height, offset in specs:
         h=int(sim.createPrimitiveShape(sim.primitiveshape_cylinder,[diameter,diameter,height],0))
         sim.setObjectAlias(h,alias)
@@ -598,7 +698,7 @@ REF_CENTER = (1.65, 1.25)              # compact reference display outside publi
 CONVEYOR_CENTER = (-3.55, 1.35)
 SHELL_POSITIONS = [(-3.65, 1.25)]
 PLATE_STAND_CENTER = (-3.90, -0.62)
-RAIL_RACK_CENTER = (-2.45, -0.65)
+RAIL_RACK_CENTER = (-2.45, -0.50)
 # Object origins compensate the large, opposite STL-origin offsets so the
 # *physical* rail centres are at x=-2.35 and x=-2.55 in the south-side rack.
 R3_RAIL_SOURCE_ORIGINS = (
@@ -624,10 +724,17 @@ DEVICE_SOURCE_CENTERS = {
     "eds": (-1.47, 1.12),
     "plc": (-1.32, -0.65),
     "dma": (-1.18, -0.65),
-    "filter": (0.70, -0.50),
+    "filter": (0.65, -0.50),
     "contactor": (-0.59, -0.62),
     "breaker": (-0.49, -0.62),
-    "com5": (-0.39, -0.62),
+    "com5": (0.75, -0.50),
+}
+# Assembly spacing required for a real bilateral gripper to install adjacent
+# DIN devices.  The raw CAD reference places their faces exactly flush, which
+# leaves zero room for the inner jaw during sequential assembly.
+ASSEMBLY_OFFSETS = {
+    "breaker": (0.008, 0.0, 0.0),
+    "com5": (0.016, 0.0, 0.0),
 }
 SOURCE_PART_ALIASES = {
     "psu": "PSU_1", "servo": "Servo_1", "eds": "EDS_1",
@@ -824,17 +931,25 @@ def add_part_collision_proxies(
     """
     root = int(handles[0])
     alias = str(sim.getObjectAlias(root, 0))
-    if 'shell' in alias.lower() or 'mounting_panel' in alias.lower():
-        # Keep the real rim, openings and mounting faces in collision checks.
-        return
     lo = np.array(info["bbox_lo"], dtype=float)
     hi = np.array(info["bbox_hi"], dtype=float)
     center = (lo + hi) / 2.0
     size = hi - lo
     specifications: list[tuple[np.ndarray, np.ndarray]]
-    if "shell" in alias.lower():
+    if 'mounting_panel' in alias.lower():
+        # Represent the broad central sheet only. The full bounding box would
+        # turn sparse stamped ribs into a fictitious 9 mm solid obstruction.
+        sheet_lo, sheet_hi = 0.00660, 0.00721
+        specifications = [(
+            np.array([size[0],size[1],sheet_hi-sheet_lo]),
+            np.array([center[0],center[1],(sheet_lo+sheet_hi)/2]),
+        )]
+    elif "shell" in alias.lower():
         wall = min(0.014, float(size[0]) * 0.08, float(size[1]) * 0.08)
+        floor = min(0.001, float(size[2]) * 0.02)
         specifications = [
+            (np.array([size[0], size[1], floor]),
+             np.array([center[0], center[1], lo[2] + floor / 2.0])),
             (np.array([wall, size[1], size[2]]),
              np.array([lo[0] + wall / 2.0, center[1], center[2]])),
             (np.array([wall, size[1], size[2]]),
@@ -1136,13 +1251,19 @@ def build_product_scene(sim, output: Path) -> dict:
 
     report["robots_reparented"] = ensure_robots_at_root(sim)
     report["robots_positioned"] = position_robot_bases(sim)
+    report["robot_joints_reset"] = reset_robot_joint_states(sim)
     report["legacy_robot_bases_removed"] = remove_legacy_robot_base_discs(sim)
     report["legacy_round_tables_removed"] = remove_legacy_round_tables(sim)
     report["r2_magnetic_pad"] = configure_r2_magnetic_pad(sim)
-    report["r3_slim_rail_fingers"] = configure_r3_slim_rail_fingers(sim)
+    report["r3_magnetic_tool_shapes"] = configure_compact_axial_tool(
+        sim,'R3',magnetic=True,tip_alias='R3_gripper_tip')
+    report["r4_slim_device_fingers"] = configure_slim_device_fingers(sim, "R4")
+    report["r6_slim_device_fingers"] = configure_slim_device_fingers(sim, "R6")
+    report["r7_visual_tcp_markers_removed"] = remove_visual_tcp_marker(sim, "R7")
     report["r8_vacuum_tool_shapes"] = configure_compact_axial_tool(sim, 'R8')
     report['r5_vacuum_tool_shapes'] = configure_r5_vacuum_tool(sim)
     report["floor_objects"] = build_floor(sim)
+    report["robot_pedestals"] = build_robot_pedestals(sim)
     rebuild_areas(sim, areas_parent)
     report["indexing_pallet"] = build_indexing_conveyor(
         sim, conveyors_parent
@@ -1184,7 +1305,7 @@ def build_product_scene(sim, output: Path) -> dict:
         place_part(
             sim,
             handles,
-            (*_source_origin_xy(manifest['parts'][part_id], (-2.35 - 0.20*index, -0.65)), basket_floor),
+            (*_source_origin_xy(manifest['parts'][part_id], (-2.35 - 0.20*index, -0.50)), basket_floor),
             manifest["parts"][part_id],
             snap_z_min=True,
         )
@@ -1208,8 +1329,8 @@ def build_product_scene(sim, output: Path) -> dict:
     fixture_parts = {
         "R4": ("psu", "servo", "eds"),
         "R5": ("plc", "dma"),
-        "R6": ("contactor", "breaker", "com5"),
-        "R8": ("filter",),
+        "R6": ("contactor", "breaker"),
+        "R8": ("com5", "filter"),
     }
     for robot, part_ids in fixture_parts.items():
         for part_id in part_ids:
@@ -1385,6 +1506,13 @@ def build_paired_targets(manifest: dict) -> dict:
                         SURFACE_Z + shell["bbox_hi"][2]), SCREW_LIFT_Z),
     }
 
+    # Touch the actual folded rim, not the overall z-max: old screw TCPs
+    # floated roughly 7 mm above material after the correct rotation.
+    for index,(x,y) in enumerate(((-.1615,.115),(-.1615,-.115),(.1615,.115),(.1615,-.115)),1):
+        targets[f'R7_SCREW_{index}'] = (
+            (STAGING_CENTER[0]+x,STAGING_CENTER[1]+y,
+             SURFACE_Z+top_surface_z('shell',(x,y))), SCREW_LIFT_Z)
+
     # Derive both endpoints from the SAME material grasp point. The former
     # hand-tuned placement coordinates belonged to the back-up CAD frame.
     rail_local = (R2_RAIL_GRIP_OFFSET_X, _center(rail_h)[1])
@@ -1399,18 +1527,21 @@ def build_paired_targets(manifest: dict) -> dict:
     )
     for index, (letter, part_id) in enumerate((('A','rail_v1'), ('B','rail_v2'))):
         info = manifest['parts'][part_id]
-        grip_z = info['bbox_hi'][2] - 0.010
-        source_xy = (-2.35 - 0.20*index, -0.65)
+        grip_z = flat_patch_height(part_id,(_center(info)[0],-.095),.006)-R2_MAGNET_COMPRESSION
+        source_xy = (-2.35 - 0.20*index, -0.50)
+        # Grip a real section 20+ mm in from the near end. A centre grip
+        # needlessly pushes the installed rail's TCP beyond R3's reach.
+        grip_xy = (_center(info)[0], -.095)
         targets[f'R3_RAIL_PICK_{letter}'] = (
-            _source_tcp(info, source_xy, basket_floor, local_z=grip_z), 0.12)
+            _source_tcp(info, source_xy, basket_floor, local_xy=grip_xy, local_z=grip_z), 0.12)
         targets[f'R3_RAIL_PLACE_{letter}'] = (
-            _assembly_tcp(info, WB1_CENTER if index == 0 else WB1_MICRO_CENTER, local_z=grip_z), 0.09)
+            _assembly_tcp(info, WB1_CENTER if index == 0 else WB1_MICRO_CENTER, local_xy=grip_xy, local_z=grip_z), 0.15)
 
     assignments = {
         "R4": (("psu", False), ("servo", False), ("eds", False)),
         "R5": (("plc", True), ("dma", True)),
-        "R6": (("contactor", False), ("breaker", False), ("com5", False)),
-        "R8": (("filter", True),),
+        "R6": (("contactor", False), ("breaker", False)),
+        "R8": (("com5", True), ("filter", True)),
     }
     for robot, parts in assignments.items():
         for part_id, vacuum in parts:
@@ -1424,6 +1555,10 @@ def build_paired_targets(manifest: dict) -> dict:
                 if robot == "R6"
                 else WB2_CENTER
             )
+            offset = ASSEMBLY_OFFSETS.get(part_id, (0.0, 0.0, 0.0))
+            assembly_station = tuple(
+                station[index] + offset[index] for index in range(2)
+            )
             targets[f"{robot}_{stem}_PICK"] = (
                 _source_tcp(
                     info, DEVICE_SOURCE_CENTERS[part_id], basket_floor,
@@ -1434,7 +1569,7 @@ def build_paired_targets(manifest: dict) -> dict:
                 APP_LIFT_Z,
             )
             targets[f"{robot}_{stem}_PLACE"] = (
-                _assembly_tcp(info, station, vacuum=vacuum,
+                _assembly_tcp(info, assembly_station, vacuum=vacuum,
                     local_xy=grasp[:2] if vacuum else None,
                     local_z=grasp[2]-VACUUM_COMPRESSION_Z if vacuum else None),
                 APP_LIFT_Z,
@@ -1484,8 +1619,8 @@ def _target_area(name: str) -> str:
         return "r5_device_supply_area"
     if name.startswith("R6_") and name.endswith("_PICK"):
         return "r6_device_supply_area"
-    if name.startswith("R8_DOOR_PICK"):
-        return "door_supply_area"
+    if name.startswith("R8_") and name.endswith("_PICK"):
+        return "r8_device_supply_area"
     if name.startswith(("R1_", "R2_", "R3_")):
         return "public_workspace_1"
     if name.startswith(("R4_", "R5_")) or (
@@ -1578,6 +1713,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", default=23000, type=int)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument('--targets-only', action='store_true', help='Regenerate APP/TCPs without reimporting the product meshes')
+    parser.add_argument(
+        '--tools-only', action='store_true',
+        help='Update slim device tools and save without rebuilding products',
+    )
     return parser.parse_args()
 
 
@@ -1585,6 +1724,21 @@ def main() -> int:
     args = parse_args()
     client = RemoteAPIClient(args.host, args.port)
     sim = client.require("sim")
+    if args.tools_only:
+        if sim.getSimulationState() != sim.simulation_stopped:
+            raise RuntimeError('stop simulation before updating tools')
+        report = {
+            'robot_joints_reset': reset_robot_joint_states(sim),
+            'r4_slim_device_fingers': configure_slim_device_fingers(sim, 'R4'),
+            'r6_slim_device_fingers': configure_slim_device_fingers(sim, 'R6'),
+            'r7_visual_tcp_markers_removed': remove_visual_tcp_marker(sim, 'R7'),
+        }
+        sim.saveScene(str(args.output))
+        sync_scene_contract(sim, args.output)
+        for key, value in report.items():
+            print(f'{key}: {value}')
+        print(f'saved_scene: {args.output}')
+        return 0
     if args.targets_only:
         if sim.getSimulationState() != sim.simulation_stopped:
             raise RuntimeError('stop simulation before updating targets')

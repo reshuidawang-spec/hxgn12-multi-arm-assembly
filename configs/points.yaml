@@ -165,7 +165,7 @@ R2_RAIL_PICK_H_TCP:
   position:
   - -3.76
   - -0.72495
-  - 0.26950571
+  - 0.27040571
   orientation_quaternion: &id003
   - 1.0
   - 0.0
@@ -179,7 +179,7 @@ R2_RAIL_PICK_H_APP:
   position:
   - -3.76
   - -0.72495
-  - 0.45950571
+  - 0.46040571
   orientation_quaternion: *id003
   description: R2 rail_pick_h vertical APP; same XY/orientation as TCP
 R2_RAIL_PLACE_H_TCP:
@@ -189,7 +189,7 @@ R2_RAIL_PLACE_H_TCP:
   position:
   - -3.01
   - 0.25005
-  - 0.27670571
+  - 0.27760571
   orientation_quaternion: &id004
   - 1.0
   - 0.0
@@ -203,7 +203,7 @@ R2_RAIL_PLACE_H_APP:
   position:
   - -3.01
   - 0.25005
-  - 0.37670570999999997
+  - 0.37760571
   orientation_quaternion: *id004
   description: R2 rail_place_h vertical APP; same XY/orientation as TCP
 R3_RAIL_PICK_A_TCP:
@@ -212,8 +212,8 @@ R3_RAIL_PICK_A_TCP:
   action: rail_pick_a
   position:
   - -2.35
-  - -0.65
-  - 0.3123
+  - -0.59255
+  - 0.28240571000000003
   orientation_quaternion: &id005
   - 0.7071067811865476
   - 0.7071067811865476
@@ -226,8 +226,8 @@ R3_RAIL_PICK_A_APP:
   action: rail_pick_a_approach
   position:
   - -2.35
-  - -0.65
-  - 0.4323
+  - -0.59255
+  - 0.40240571
   orientation_quaternion: *id005
   description: R3 rail_pick_a vertical APP; same XY/orientation as TCP
 R3_RAIL_PICK_B_TCP:
@@ -236,8 +236,8 @@ R3_RAIL_PICK_B_TCP:
   action: rail_pick_b
   position:
   - -2.5500000000000003
-  - -0.65
-  - 0.3123
+  - -0.59625
+  - 0.28240571000000003
   orientation_quaternion: &id006
   - 0.7071067811865476
   - 0.7071067811865476
@@ -250,8 +250,8 @@ R3_RAIL_PICK_B_APP:
   action: rail_pick_b_approach
   position:
   - -2.5500000000000003
-  - -0.65
-  - 0.4323
+  - -0.59625
+  - 0.40240571
   orientation_quaternion: *id006
   description: R3 rail_pick_b vertical APP; same XY/orientation as TCP
 R3_RAIL_PLACE_A_TCP:
@@ -260,8 +260,8 @@ R3_RAIL_PLACE_A_TCP:
   action: rail_place_a
   position:
   - -2.94845
-  - 0.24755
-  - 0.3075
+  - 0.155
+  - 0.27760571
   orientation_quaternion: &id007
   - 0.7071067811865476
   - 0.7071067811865476
@@ -274,8 +274,8 @@ R3_RAIL_PLACE_A_APP:
   action: rail_place_a_approach
   position:
   - -2.94845
-  - 0.24755
-  - 0.39749999999999996
+  - 0.155
+  - 0.42760571
   orientation_quaternion: *id007
   description: R3 rail_place_a vertical APP; same XY/orientation as TCP
 R3_RAIL_PLACE_B_TCP:
@@ -284,8 +284,8 @@ R3_RAIL_PLACE_B_TCP:
   action: rail_place_b
   position:
   - -3.2314499999999997
-  - 0.25125
-  - 0.3075
+  - 0.155
+  - 0.27760571
   orientation_quaternion: &id008
   - 0.7071067811865476
   - 0.7071067811865476
@@ -298,8 +298,8 @@ R3_RAIL_PLACE_B_APP:
   action: rail_place_b_approach
   position:
   - -3.2314499999999997
-  - 0.25125
-  - 0.39749999999999996
+  - 0.155
+  - 0.42760571
   orientation_quaternion: *id008
   description: R3 rail_place_b vertical APP; same XY/orientation as TCP
 R7_SCREW_1_TCP:
@@ -309,7 +309,7 @@ R7_SCREW_1_TCP:
   position:
   - -0.1115
   - 0.365
-  - 0.41200000000000003
+  - 0.40500571
   orientation_quaternion: &id009
   - 1.0
   - 0.0
@@ -323,7 +323,7 @@ R7_SCREW_1_APP:
   position:
   - -0.1115
   - 0.365
-  - 0.49200000000000005
+  - 0.48500571000000003
   orientation_quaternion: *id009
   description: R7 screw_1 vertical APP; same XY/orientation as TCP
 R7_SCREW_2_TCP:
@@ -333,7 +333,7 @@ R7_SCREW_2_TCP:
   position:
   - -0.1115
   - 0.135
-  - 0.41200000000000003
+  - 0.40500571
   orientation_quaternion: &id010
   - 1.0
   - 0.0
@@ -347,7 +347,7 @@ R7_SCREW_2_APP:
   position:
   - -0.1115
   - 0.135
-  - 0.49200000000000005
+  - 0.48500571000000003
   orientation_quaternion: *id010
   description: R7 screw_2 vertical APP; same XY/orientation as TCP
 R7_SCREW_3_TCP:
@@ -357,7 +357,7 @@ R7_SCREW_3_TCP:
   position:
   - 0.21150000000000002
   - 0.365
-  - 0.41200000000000003
+  - 0.40500571
   orientation_quaternion: &id011
   - 1.0
   - 0.0
@@ -371,7 +371,7 @@ R7_SCREW_3_APP:
   position:
   - 0.21150000000000002
   - 0.365
-  - 0.49200000000000005
+  - 0.48500571000000003
   orientation_quaternion: *id011
   description: R7 screw_3 vertical APP; same XY/orientation as TCP
 R7_SCREW_4_TCP:
@@ -381,7 +381,7 @@ R7_SCREW_4_TCP:
   position:
   - 0.21150000000000002
   - 0.135
-  - 0.41200000000000003
+  - 0.40500571
   orientation_quaternion: &id012
   - 1.0
   - 0.0
@@ -395,7 +395,7 @@ R7_SCREW_4_APP:
   position:
   - 0.21150000000000002
   - 0.135
-  - 0.49200000000000005
+  - 0.48500571000000003
   orientation_quaternion: *id012
   description: R7 screw_4 vertical APP; same XY/orientation as TCP
 R4_PSU_PICK_TCP:
@@ -715,7 +715,7 @@ R6_BREAKER_PLACE_TCP:
   area: public_workspace_2
   action: breaker_place
   position:
-  - -0.9456500000000001
+  - -0.9376500000000001
   - 0.29415
   - 0.2886
   orientation_quaternion: &id026
@@ -729,65 +729,65 @@ R6_BREAKER_PLACE_APP:
   area: public_workspace_2
   action: breaker_place_approach
   position:
-  - -0.9456500000000001
+  - -0.9376500000000001
   - 0.29415
   - 0.4086
   orientation_quaternion: *id026
   description: R6 breaker_place vertical APP; same XY/orientation as TCP
-R6_COM5_PICK_TCP:
-  robot: R6
-  area: r6_device_supply_area
+R8_COM5_PICK_TCP:
+  robot: R8
+  area: r8_device_supply_area
   action: com5_pick
   position:
-  - -0.39
-  - -0.62
-  - 0.28665
+  - 0.749983393740654
+  - -0.4999884526640177
+  - 0.2903057
   orientation_quaternion: &id027
   - 0.7071067811865476
   - 0.7071067811865476
   - 0.0
   - 0.0
-  description: R6 com5_pick contact TCP
-R6_COM5_PICK_APP:
-  robot: R6
-  area: r6_device_supply_area
+  description: R8 com5_pick contact TCP
+R8_COM5_PICK_APP:
+  robot: R8
+  area: r8_device_supply_area
   action: com5_pick_approach
   position:
-  - -0.39
-  - -0.62
-  - 0.40665
+  - 0.749983393740654
+  - -0.4999884526640177
+  - 0.4103057
   orientation_quaternion: *id027
-  description: R6 com5_pick vertical APP; same XY/orientation as TCP
-R6_COM5_PLACE_TCP:
-  robot: R6
+  description: R8 com5_pick vertical APP; same XY/orientation as TCP
+R8_COM5_PLACE_TCP:
+  robot: R8
   area: public_workspace_3
   action: com5_place
   position:
-  - 0.06855
-  - 0.19635
-  - 0.31475000000000003
+  - 0.084533393740654
+  - 0.19636154733598232
+  - 0.3184057
   orientation_quaternion: &id028
   - 0.7071067811865476
   - 0.7071067811865476
   - 0.0
   - 0.0
-  description: R6 com5_place contact TCP
-R6_COM5_PLACE_APP:
-  robot: R6
+  description: R8 com5_place contact TCP
+R8_COM5_PLACE_APP:
+  robot: R8
   area: public_workspace_3
   action: com5_place_approach
   position:
-  - 0.06855
-  - 0.19635
-  - 0.43475
+  - 0.084533393740654
+  - 0.19636154733598232
+  - 0.4384057
   orientation_quaternion: *id028
-  description: R6 com5_place vertical APP; same XY/orientation as TCP
+  description: R8 com5_place vertical APP; same XY/orientation as TCP
 R8_FILTER_PICK_TCP:
   robot: R8
-  area: public_workspace_3
+  area: r8_device_supply_area
   action: filter_pick
   position:
-  - 0.700019013941288
+  - 0.650019013941288
   - -0.5000179847195745
   - 0.29920571000000007
   orientation_quaternion: &id029
@@ -798,10 +798,10 @@ R8_FILTER_PICK_TCP:
   description: R8 filter_pick contact TCP
 R8_FILTER_PICK_APP:
   robot: R8
-  area: public_workspace_3
+  area: r8_device_supply_area
   action: filter_pick_approach
   position:
-  - 0.700019013941288
+  - 0.650019013941288
   - -0.5000179847195745
   - 0.41920571000000006
   orientation_quaternion: *id029

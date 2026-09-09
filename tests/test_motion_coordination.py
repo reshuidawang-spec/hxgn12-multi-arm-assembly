@@ -34,7 +34,7 @@ from scripts.run_8arm_cabinet_assembly import (
     R3_MAX_DOWN_TILT,
     R3_RAIL_STOW_JOINTS,
     R3_RAIL_STOW_POSITION,
-    R6_COM5_TRANSIT_Z,
+    R8_COM5_TRANSIT_Z,
     R6_STOW_Z,
     R8_DOOR_TRANSIT_Z,
     R4_HANDOFF_CENTER,
@@ -116,7 +116,7 @@ class MotionCoordinationTests(unittest.TestCase):
             ("R4", "PSU_PLACE"), ("R4", "SERVO_PLACE"), ("R4", "EDS_PLACE"),
             ("R5", "PLC_PLACE"), ("R5", "DMA_PLACE"),
             ("R6", "CONTACTOR_PLACE"), ("R6", "BREAKER_PLACE"),
-            ("R6", "COM5_PLACE"), ("R8", "FILTER_PLACE"),
+            ("R8", "COM5_PLACE"), ("R8", "FILTER_PLACE"),
         }:
             self.assertIn(operation, scheduled)
 
@@ -254,11 +254,11 @@ class MotionCoordinationTests(unittest.TestCase):
         self.assertNotIn("WB1_PICK", ACTION_TARGETS["R3"])
         self.assertNotIn("HANDOFF_PLACE", ACTION_TARGETS["R3"])
 
-    def test_r6_reach_limited_stow_and_com5_height_remain_above_floor(self):
+    def test_r6_stow_and_r8_com5_height_remain_above_floor(self):
         self.assertEqual(R6_STOW_Z, 0.48)
-        self.assertEqual(R6_COM5_TRANSIT_Z, 0.48)
+        self.assertEqual(R8_COM5_TRANSIT_Z, 0.50)
         self.assertGreaterEqual(R6_STOW_Z, MIN_TRANSIT_Z)
-        self.assertGreaterEqual(R6_COM5_TRANSIT_Z, MIN_TRANSIT_Z)
+        self.assertGreaterEqual(R8_COM5_TRANSIT_Z, MIN_TRANSIT_Z)
 
     def test_complete_cabinet_transfers_are_removed_from_robot_actions(self):
         forbidden = {
@@ -275,7 +275,10 @@ class MotionCoordinationTests(unittest.TestCase):
             ACTION_TARGETS["R4"],
             ["PSU_PICK", "PSU_PLACE", "SERVO_PICK", "SERVO_PLACE", "EDS_PICK", "EDS_PLACE"],
         )
-        self.assertEqual(ACTION_TARGETS["R8"], ["FILTER_PICK", "FILTER_PLACE"])
+        self.assertEqual(
+            ACTION_TARGETS["R8"],
+            ["COM5_PICK", "COM5_PLACE", "FILTER_PICK", "FILTER_PLACE"],
+        )
 
     def test_tool_transform_inverse_round_trip(self):
         pose = [0.12, -0.31, 0.27, 0.2, -0.3, 0.1, 0.9273618495]

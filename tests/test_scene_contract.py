@@ -78,7 +78,9 @@ class SceneContractTests(unittest.TestCase):
         contactor_x = targets["R6_CONTACTOR_PLACE"][0][0]
         breaker_x = targets["R6_BREAKER_PLACE"][0][0]
         self.assertAlmostEqual(contactor_x, -1.09315 + WB2_MICRO_INDEX_X)
-        self.assertAlmostEqual(breaker_x, -1.06565 + WB2_MICRO_INDEX_X)
+        self.assertAlmostEqual(
+            breaker_x, -1.06565 + WB2_MICRO_INDEX_X + 0.008
+        )
 
     def test_robot_config_matches_latest_scene_tools(self):
         self.assertEqual(set(self.robots), set(ROBOT_IDS))
@@ -93,6 +95,10 @@ class SceneContractTests(unittest.TestCase):
             self.robots["R2"]["end_effector"], "magnetic_gripper"
         )
         self.assertEqual(self.robots["R2"]["tip"], "R2_vacuum_tip")
+        self.assertEqual(
+            self.robots["R3"]["end_effector"], "magnetic_gripper"
+        )
+        self.assertEqual(self.robots["R3"]["tip"], "R3_gripper_tip")
         self.assertEqual(self.robots["R8"]["end_effector"], "vacuum")
         self.assertEqual(self.robots["R8"]["tip"], "R8_vacuum_tip")
 
@@ -100,7 +106,7 @@ class SceneContractTests(unittest.TestCase):
         targets = build_paired_targets(_load_manifest())
         pick_tcp = targets["R8_FILTER_PICK"][0]
         place_tcp = targets["R8_FILTER_PLACE"][0]
-        for actual, expected in zip(pick_tcp[:2], (0.70, -0.50)):
+        for actual, expected in zip(pick_tcp[:2], (0.65, -0.50)):
             self.assertAlmostEqual(actual, expected, places=4)
         self.assertLess(place_tcp[2], 0.412)
         self.assertGreater(pick_tcp[2], 0.282)

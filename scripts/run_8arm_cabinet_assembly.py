@@ -49,8 +49,8 @@ MAX_DOWN_TILT = math.radians(
     float(MOTION_POLICY["orientation"]["default_max_tilt_deg"])
 )
 MAX_TRANSFER_TILT = MAX_DOWN_TILT
-IK_POSITION_TOLERANCE = 0.003
-IK_ANGLE_TOLERANCE = math.radians(2.0)
+IK_POSITION_TOLERANCE = 0.0005
+IK_ANGLE_TOLERANCE = math.radians(0.5)
 TRANSIT_POSITION_TOLERANCE = 0.015
 PLAN_SCHEMA_VERSION = 36
 MIN_TRANSIT_Z = float(MOTION_POLICY["clearance"]["minimum_transit_tcp_z_m"])
@@ -75,7 +75,7 @@ ACTION_WORKSPACES = {
     ("R6", "DMA_PLACE"): "public_workspace_2",    # legacy target name
     ("R6", "CONTACTOR_PLACE"): "public_workspace_2",
     ("R6", "BREAKER_PLACE"): "public_workspace_2",
-    ("R6", "COM5_PLACE"): "public_workspace_3",
+    ("R8", "COM5_PLACE"): "public_workspace_3",
     ("R7", "SCREW_1"): "public_workspace_3",
     ("R7", "SCREW_2"): "public_workspace_3",
     ("R7", "SCREW_3"): "public_workspace_3",
@@ -108,10 +108,10 @@ ACTION_TARGETS = {
     ],
     "R6": [
         "CONTACTOR_PICK", "CONTACTOR_PLACE", "BREAKER_PICK",
-        "BREAKER_PLACE", "COM5_PICK", "COM5_PLACE",
+        "BREAKER_PLACE",
     ],
     "R7": ["SCREW_1", "SCREW_2", "SCREW_3", "SCREW_4"],
-    "R8": ["FILTER_PICK", "FILTER_PLACE"],
+    "R8": ["COM5_PICK", "COM5_PLACE", "FILTER_PICK", "FILTER_PLACE"],
 }
 
 
@@ -191,7 +191,17 @@ GRIPPER_CLOSED_GAPS = {
     # handoff/WB2 TCPs; the old generic 35 mm gap touched only one side.
     "R4": 0.019,
 }
-GRIPPER_FINGER_THICKNESSES = {"R3": 0.006}
+GRIPPER_FINGER_THICKNESSES = {
+    "R3": 0.006,
+    # R4 installs the 12.5 mm-wide EDS beside a DIN rail with only 8.1 mm
+    # side clearance.  Its scene tool is therefore the 6 mm slim-device
+    # variant built by configure_r4_slim_device_fingers(), not the generic
+    # 20 mm jaw assumed by the other parallel grippers.
+    "R4": 0.006,
+    # R6 installs DIN-mounted switching devices over the horizontal rail;
+    # the same slim fingertip is required to descend beside that rail.
+    "R6": 0.006,
+}
 
 
 def part_gripper_gap(robot: str, part_key: str | None = None) -> float:
@@ -266,7 +276,7 @@ R2_RAIL_ENDPOINTS = {
 # poses remain essentially vertical.
 R3_MAX_DOWN_TILT = math.radians(6.0)
 R6_STOW_Z = 0.48
-R6_COM5_TRANSIT_Z = 0.48
+R8_COM5_TRANSIT_Z = 0.50
 R8_DOOR_TRANSIT_Z = 0.50
 R8_DOOR_STOW_POSITION = [0.789, -0.489, 0.436]
 R8_DOOR_STOW_JOINTS = [
@@ -515,7 +525,7 @@ PARTS = {
     "filter": ("Filter_1", "REF_filter", "/FiveCR5A_Cell/Baskets/R8_Device_Basket"),
     "contactor": ("Contactor_1", "REF_contactor", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
     "breaker": ("Breaker_1", "REF_breaker", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
-    "com5": ("COM5_1", "REF_com5", "/FiveCR5A_Cell/Baskets/R6_Device_Basket"),
+    "com5": ("COM5_1", "REF_com5", "/FiveCR5A_Cell/Baskets/R8_Device_Basket"),
 }
 
 STATIONS = {
@@ -531,6 +541,10 @@ STATIONS = {
 }
 R4_HANDOFF_CENTER = [-2.05, 0.45, 0.27]
 REFERENCE_CENTER = [1.65, 1.25, 0.27]
+ASSEMBLY_OFFSETS = {
+    "breaker": [0.008, 0.0, 0.0],
+    "com5": [0.016, 0.0, 0.0],
+}
 
 PICK_PART = {
     ("R1", "SHELL_PICK"): "shell",
@@ -544,7 +558,7 @@ PICK_PART = {
     ("R5", "DMA_PICK"): "dma",
     ("R6", "CONTACTOR_PICK"): "contactor",
     ("R6", "BREAKER_PICK"): "breaker",
-    ("R6", "COM5_PICK"): "com5",
+    ("R8", "COM5_PICK"): "com5",
     ("R8", "FILTER_PICK"): "filter",
 }
 
@@ -560,7 +574,7 @@ PLACE_PART = {
     ("R5", "DMA_PLACE"): "dma",
     ("R6", "CONTACTOR_PLACE"): "contactor",
     ("R6", "BREAKER_PLACE"): "breaker",
-    ("R6", "COM5_PLACE"): "com5",
+    ("R8", "COM5_PLACE"): "com5",
     ("R8", "FILTER_PLACE"): "filter",
 }
 
@@ -589,7 +603,7 @@ SOURCE_FIXTURE = {
     "dma": "/FiveCR5A_Cell/Baskets/R5_Device_Basket",
     "contactor": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
     "breaker": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
-    "com5": "/FiveCR5A_Cell/Baskets/R6_Device_Basket",
+    "com5": "/FiveCR5A_Cell/Baskets/R8_Device_Basket",
     "filter": "/FiveCR5A_Cell/Baskets/R8_Device_Basket",
 }
 
@@ -599,15 +613,15 @@ CONTACT_STATION = {
     ("R1", "WB1_PLACE"): "wb1",
     ("R2", "RAIL_PLACE_H"): "wb1",
     ("R3", "RAIL_PLACE_A"): "wb1",
-    ("R3", "RAIL_PLACE_B"): "wb1",
+    ("R3", "RAIL_PLACE_B"): "wb1_micro",
     ("R4", "PSU_PLACE"): "wb2",
     ("R4", "SERVO_PLACE"): "wb2",
     ("R4", "EDS_PLACE"): "wb2",
     ("R5", "PLC_PLACE"): "wb2",
     ("R5", "DMA_PLACE"): "wb2",
-    ("R6", "CONTACTOR_PLACE"): "wb2",
-    ("R6", "BREAKER_PLACE"): "wb2",
-    ("R6", "COM5_PLACE"): "staging",
+    ("R6", "CONTACTOR_PLACE"): "wb2_micro",
+    ("R6", "BREAKER_PLACE"): "wb2_micro",
+    ("R8", "COM5_PLACE"): "staging",
     ("R7", "SCREW_1"): "staging",
     ("R7", "SCREW_2"): "staging",
     ("R7", "SCREW_3"): "staging",
@@ -667,7 +681,7 @@ BASKET_PICK_CONTAINER = {
     ("R5", "DMA_PICK"): "r5_basket",
     ("R6", "CONTACTOR_PICK"): "r6_basket",
     ("R6", "BREAKER_PICK"): "r6_basket",
-    ("R6", "COM5_PICK"): "r6_basket",
+    ("R8", "COM5_PICK"): "r8_basket",
     ("R8", "FILTER_PICK"): "r8_basket",
 }
 BASKET_PICK_MATES = {
@@ -680,10 +694,10 @@ BASKET_PICK_MATES = {
     ("R5", "PLC_PICK"): ["DMA_1", "Filter_1"],
     ("R5", "DMA_PICK"): ["PLC_1", "Filter_1"],
     ("R5", "FILTER_PICK"): ["PLC_1", "DMA_1"],
-    ("R6", "CONTACTOR_PICK"): ["Breaker_1", "COM5_1"],
-    ("R6", "BREAKER_PICK"): ["Contactor_1", "COM5_1"],
-    ("R6", "COM5_PICK"): ["Contactor_1", "Breaker_1"],
-    ("R8", "DOOR_PICK"): [],
+    ("R6", "CONTACTOR_PICK"): ["Breaker_1"],
+    ("R6", "BREAKER_PICK"): ["Contactor_1"],
+    ("R8", "COM5_PICK"): ["Filter_1"],
+    ("R8", "FILTER_PICK"): ["COM5_1"],
 }
 
 
@@ -911,8 +925,17 @@ class Scene:
             ]
         self._batch_script: int | None = None
         self._planner_script: int | None = None
+        self._alias_cache: dict[str,int] = {}
 
     def by_alias(self, alias: str) -> int:
+        cached = self._alias_cache.get(alias)
+        if cached is not None:
+            try:
+                if str(self.sim.getObjectAlias(cached,0)) == alias:
+                    return cached
+            except Exception:
+                pass
+            self._alias_cache.pop(alias,None)
         matches = [
             int(handle)
             for handle in self.sim.getObjectsInTree(
@@ -930,6 +953,7 @@ class Scene:
             ]
         if len(matches) != 1:
             raise RuntimeError(f"expected one object named {alias}, found {len(matches)}")
+        self._alias_cache[alias] = matches[0]
         return matches[0]
 
     def set_joints(self, robot: str, values: Iterable[float]) -> None:
@@ -1304,11 +1328,14 @@ function applyFrameBatch(joints, flatValues, frameCount, movingCollections,
         end
         return {true,-1,-1,-1,''}
     end
-    local stopped=sim.getSimulationState()==sim.simulation_stopped
-    local previousStepLevel=0
-    if not stopped then previousStepLevel=sim.setStepping(true) end
+    -- A remotely invoked customization-script function has no resumable Lua
+    -- coroutine.  Disable automatic yielding for this bounded callback using
+    -- the same primitive as CoppeliaSim's Lua base library, then restore the
+    -- previous state.  Restoring setAutoYieldDelay(0.002) after a long call
+    -- can itself immediately try to yield and fail outside a coroutine.
+    local previousAutoYield=setAutoYield(false)
     local ok,result=xpcall(invoke,debug.traceback)
-    if not stopped then sim.setStepping(previousStepLevel) end
+    setAutoYield(previousAutoYield)
     if not ok then return false,-2,-1,-1,result end
     return table.unpack(result)
 end
@@ -1500,6 +1527,8 @@ def ik_candidates(
             candidate[2] = rng.uniform(-2.72, 2.72)
             seeds.append(candidate)
         solutions: list[list[float]] = []
+        rejected_collisions: set[str] = set()
+        minimum_error = math.inf
         for initial in seeds:
             scene.set_joints(robot, initial)
             desired_down = (
@@ -1539,7 +1568,10 @@ def ik_candidates(
                 float(sim.getJointPosition(handle)) for handle in scene.joints[robot]
             )
             scene.set_joints(robot, solution)
-            if scene.collision_details(pair) is not None:
+            minimum_error = min(minimum_error,math.dist(actual_position,position))
+            collision = scene.collision_details(pair)
+            if collision is not None:
+                rejected_collisions.add(str(collision))
                 continue
             if math.dist(actual_position, position) > IK_POSITION_TOLERANCE:
                 continue
@@ -1551,6 +1583,8 @@ def ik_candidates(
             if len(solutions) >= max_solutions:
                 break
         solutions.sort(key=lambda value: config_distance(value, seed))
+        if not solutions:
+            print(f'[IK rejected] {robot} at {position}: best TCP error={minimum_error*1000:.3f} mm; collisions={sorted(rejected_collisions)[:4]}',flush=True)
         return solutions
     finally:
         scene.destroy_collision_pair(pair)
@@ -1678,7 +1712,8 @@ def cartesian_down_line(
                 collision = scene.collision_details(active_pair)
                 if collision is not None:
                     raise RuntimeError(
-                        f"{robot} Cartesian collision at {position}: {collision}"
+                        f"{robot} Cartesian collision at {position}: {collision}; "
+                        f"joints={config}"
                     )
             matrix = sim.getObjectMatrix(scene.down_tips[robot], -1)
             if float(matrix[10]) > -math.cos(max_tilt):
@@ -1932,7 +1967,7 @@ def attach_part_for_loaded_planning(
     # Magnetic and vacuum tools have no finger links.  Their measured grasp
     # transform is still reproduced by parenting the part at the pick TCP;
     # only mechanical grippers need a temporary close during loaded planning.
-    if robot not in {"R2", "R5", "R7", "R8"}:
+    if robot not in {"R2", "R3", "R5", "R7", "R8"}:
         left = unique_alias(
             scene.sim, scene.roots[robot], f"{robot}T_left_finger_link"
         )
@@ -2513,6 +2548,19 @@ def action_exclusions(scene: Scene, robot: str, stem: str) -> tuple[list[int], l
         )
         transit.append(part)
         contact.append(part)
+    if (robot, stem) == ("R8", "COM5_PLACE"):
+        # COM5 is inserted into the PLC connector envelope.  PLC remains a
+        # strict obstacle in transit and is exempted only on APP -> TCP.
+        contact.append(
+            unique_alias(scene.sim, int(scene.sim.handle_scene), "PLC_1")
+        )
+    if robot == "R7" and stem.startswith("SCREW_"):
+        # The screwdriver bit must touch the folded cabinet rim at TCP.
+        # Keep the shell strict during transit and exempt it only on the
+        # short vertical APP -> TCP fastening leg.
+        contact.append(
+            unique_alias(scene.sim, int(scene.sim.handle_scene), "Shell_1")
+        )
     # A source bin and its neighbouring parts are obstacles, including on
     # APP/TCP legs. Only the held/touched part is exempt from tool contact.
     return transit, contact
@@ -2524,7 +2572,12 @@ def carried_contact_handles(scene: Scene, robot: str, stem: str) -> list[int]:
     paths = STATION_FIXTURE_PATHS.get(station, [])
     if (robot,stem) in PICK_PART:
         paths = [SOURCE_FIXTURE[PICK_PART[(robot,stem)]]]
-    return [int(scene.sim.getObject(path)) for path in paths]
+    handles = [int(scene.sim.getObject(path)) for path in paths]
+    if (robot, stem) == ("R8", "COM5_PLACE"):
+        handles.append(
+            unique_alias(scene.sim, int(scene.sim.handle_scene), "PLC_1")
+        )
+    return handles
 
 
 def _legacy_action_exclusions_unused(scene: Scene, robot: str, stem: str):
@@ -2903,7 +2956,7 @@ def planning_product_state(robot: str, stem: str) -> tuple[str, list[str]]:
     station = ('wb1_micro' if robot == 'R3' and stem.endswith('_B') else
                'wb1' if robot in {'R1','R2','R3'} else
                'wb2' if robot in {'R4','R5'} else
-               'wb2_micro' if robot == 'R6' and not stem.startswith('COM5') else 'staging')
+               'wb2_micro' if robot == 'R6' else 'staging')
     return station, installed
 
 
@@ -2917,7 +2970,7 @@ def plan_action(scene: Scene, robot: str, stem: str, *args, **kwargs) -> dict[st
     pallet_pose = scene.sim.getObjectPosition(pallet, -1)
     try:
         pick_key = PICK_PART.get((robot,stem))
-        if pick_key is not None and robot in {'R1','R3','R4','R6'}:
+        if pick_key is not None and robot in {'R1','R4','R6'}:
             tool = scene.tool_roots[robot]
             gap = part_gripper_gap(robot,pick_key)+0.012
             half = (gap+GRIPPER_FINGER_THICKNESSES.get(robot,0.020))/2
@@ -2931,7 +2984,11 @@ def plan_action(scene: Scene, robot: str, stem: str, *args, **kwargs) -> dict[st
             saved[h] = scene.sim.getObjectMatrix(h, -1)
             matrix = list(scene.sim.getObjectMatrix(scene.by_alias(PARTS[key][1]), -1))
             for i in range(3):
-                matrix[3+4*i] += STATIONS[station][i]-REFERENCE_CENTER[i]
+                matrix[3+4*i] += (
+                    STATIONS[station][i]
+                    + ASSEMBLY_OFFSETS.get(key, [0.0, 0.0, 0.0])[i]
+                    - REFERENCE_CENTER[i]
+                )
             scene.sim.setObjectMatrix(h, -1, matrix)
         scene.sim.setObjectPosition(pallet, -1, [*STATIONS[station][:2], pallet_pose[2]])
         if kwargs.get('moving_exclusions'):
@@ -3017,12 +3074,17 @@ def _plan_action(
         preferred_workspace_height(MOTION_POLICY, workspace),
         app_position[2],
     )
-    if robot == "R6" and stem == "COM5_PLACE":
-        # With R6's conveyor-clear base pose, the strict tool-down workspace
-        # ends just above 0.50 m at the STAGING target.  A 0.48 m horizontal
-        # transfer remains above the 0.44 m global floor and preserves the
-        # canonical high-translate / vertical APP-to-TCP descent.
-        preferred_z = max(R6_COM5_TRANSIT_Z, app_position[2])
+    if robot == "R3":
+        # The short rail tool reaches every APP/TCP vertically, but its source
+        # branch is close to the upper axial limit at z=0.50.  The policy's
+        # 0.44 m transit floor is already clear of the rack and cabinet, so do
+        # not add an unreachable 60 mm of lift merely to match WB1's generic
+        # preferred height.
+        preferred_z = max(MIN_TRANSIT_Z, app_position[2])
+    if robot == "R8" and stem == "COM5_PLACE":
+        # The small vacuum-held connector crosses only shared workspace 3;
+        # 0.50 m clears the cabinet while avoiding an unnecessary high arc.
+        preferred_z = max(R8_COM5_TRANSIT_Z, app_position[2])
     if robot == "R8" and stem == "DOOR_PLACE":
         # R8 already holds the door at a collision-checked 0.50 m PARK.  A
         # preliminary lift at that same source XY drives the down-facing arm
@@ -3111,8 +3173,8 @@ def _plan_action(
                 app_position,
                 legacy_app,
                 transit_exclusions,
-                attempts=32,
-                max_solutions=6,
+                attempts=96 if robot == 'R3' else 32,
+                max_solutions=16 if robot == 'R3' else 6,
                 fixed_quaternion=target_quaternion,
             )
             for candidate in app_solutions:
@@ -3627,6 +3689,9 @@ def _plan_action(
                     errors.append(str(exc))
                     scene.set_joints(robot, stow)
     detail = " | ".join(errors[-8:]) if errors else "no collision-free down-facing route"
+    unique_errors = list(dict.fromkeys(errors))
+    for rejected in unique_errors[:12]:
+        print(f"[corridor reject] {robot}_{stem}: {rejected}", flush=True)
     raise RuntimeError(f"unable to plan {robot}_{stem}: {detail}")
 
 
@@ -3665,6 +3730,12 @@ def validate_checkpoint_stows(scene: Scene, plan: dict) -> None:
     for robot in ROBOT_IDS:
         scene.set_joints(robot, plan["stow"][robot])
     for robot in ROBOT_IDS:
+        saved_position = plan.get("stow_positions", {}).get(robot)
+        min_stow_z = (
+            float(saved_position[2]) - 0.005
+            if isinstance(saved_position, list) and len(saved_position) == 3
+            else MIN_TRANSIT_Z - 0.005
+        )
         validated_joint_line(
             scene,
             robot,
@@ -3672,7 +3743,7 @@ def validate_checkpoint_stows(scene: Scene, plan: dict) -> None:
             plan["stow"][robot],
             [],
             max_tilt=MAX_DOWN_TILT,
-            min_tip_z=MIN_TRANSIT_Z,
+            min_tip_z=min_stow_z,
         )
         print(f"[stow audit] {robot} valid in current scene", flush=True)
 
@@ -3886,7 +3957,7 @@ def build_plan(
                     attempts=48, max_solutions=4, fixed_quaternion=first_app_quaternion,
                 )
                 if not candidates:
-                    raise RuntimeError('R8 has no valid front-up door source APP')
+                    raise RuntimeError('R8 has no valid filter source APP')
                 door_stow = min(candidates, key=lambda q: config_distance(q, R8_DOOR_STOW_JOINTS))
                 validated_joint_line(
                     scene,
@@ -3899,7 +3970,7 @@ def build_plan(
                 )
                 stows[robot] = list(door_stow)
                 stow_positions[robot] = list(first_app_position)
-                print(f"[stow] {robot} verified door-vacuum carry posture", flush=True)
+                print(f"[stow] {robot} verified filter-vacuum carry posture", flush=True)
                 continue
             seed = list(HOME)
             if int(seed_plan.get("schema_version", 0)) == 1:
@@ -4206,7 +4277,7 @@ class AssemblyRuntime:
         self.assembly = None
 
     def set_gripper(self, robot: str, opened: bool, part_key: str | None = None) -> None:
-        if robot in {"R2", "R5", "R7", "R8"}:
+        if robot in {"R2", "R3", "R5", "R7", "R8"}:
             return
         root = self.scene.roots[robot]
         tool = unique_alias(self.sim, root, f"{robot}T")
@@ -4231,7 +4302,11 @@ class AssemblyRuntime:
         part = self.part_handles[key]
         matrix = list(self.sim.getObjectMatrix(self.ref_handles[key], -1))
         for index in range(3):
-            matrix[3 + index * 4] += STATIONS[station][index] - REFERENCE_CENTER[index]
+            matrix[3 + index * 4] += (
+                STATIONS[station][index]
+                + ASSEMBLY_OFFSETS.get(key, [0.0, 0.0, 0.0])[index]
+                - REFERENCE_CENTER[index]
+            )
         current = self.sim.getObjectMatrix(part, -1)
         position_error = math.sqrt(sum((current[i]-matrix[i])**2 for i in (3,7,11)))
         cosine = (sum(current[i]*matrix[i] for i in (0,1,2,4,5,6,8,9,10))-1)/2
@@ -4347,22 +4422,25 @@ class AssemblyRuntime:
         # one. Check the real CAD surfaces at the measured TCP first.
         part_id = PARTS[key][1].removeprefix('REF_')
         local = self.sim.getObjectPosition(self.scene.tips[robot],self.part_handles[key])
-        if robot in {'R2','R5','R8'}:
-            radius = {'R2':.007,'R5':.006,'R8':.006}[robot]
+        if robot in {'R2','R3','R5','R8'}:
+            radius = {'R2':.007,'R3':.006,'R5':.006,'R8':.006}[robot]
             surface = flat_patch_height(part_id,tuple(local[:2]),radius,tolerance=.001)
             compression = surface-local[2]
             if not -.0005 <= compression <= .003:
                 raise RuntimeError(f'{robot} {key} not on suction/magnetic surface: compression={compression*1000:.2f} mm')
             print(f'[grasp] {robot} {key}: surface contact {compression*1000:.2f} mm',flush=True)
         else:
-            axis = 1 if robot=='R1' else 0
-            uv = tuple(local[i] for i in range(3) if i != axis)
-            hits = axis_intersections(triangles(part_id),uv,axis)
-            half = part_gripper_gap(robot,key)/2
-            if not (any(abs(float(h)-local[axis]-half)<.002 for h in hits)
-                    and any(abs(float(h)-local[axis]+half)<.002 for h in hits)):
-                raise RuntimeError(f'{robot} {key} jaws do not straddle real material at TCP {list(local)}')
-            print(f'[grasp] {robot} {key}: opposing material faces verified',flush=True)
+            # A TCP centre ray is not the finite contact-pad footprint:
+            # at a thin folded rim it can miss while both pads genuinely
+            # touch. Require the actual two pad meshes to contact the real
+            # workpiece mesh, never its bounding-box collision proxy.
+            self.set_gripper(robot,False,key)
+            for side in ('left','right'):
+                pad=self.scene.by_alias(f'{robot}T_{side}_inner_rubber_pad')
+                hit=self.sim.checkCollision(pad,self.part_handles[key])
+                if int(hit[0])<=0:
+                    raise RuntimeError(f'{robot} {key}: {side} rubber pad has no real mesh contact')
+            print(f'[grasp] {robot} {key}: both real rubber pads contact material',flush=True)
         self.set_gripper(robot, False, key)
         self.sim.setObjectParent(self.part_handles[key], self.scene.tips[robot], True)
 
@@ -4459,6 +4537,51 @@ class AssemblyRuntime:
             for frame in self.plan["initial_paths"][robot]
         ]
         return Track(robot, frames, len(frames) - 1, [])
+
+    def visual_frame_indices(self, tracks: list[Track], length: int) -> list[int]:
+        """Select visual replay frames without dropping process keyframes.
+
+        Fixed paths are collision-audited at their full sampling density when
+        they are planned and accepted. ``--speed`` only changes how many of
+        those already-audited frames are displayed. APP, TCP, contact,
+        withdrawal, and per-track final frames are always retained so
+        grasp/release events and the vertical approach remain exact.
+        """
+        if length <= 0:
+            return []
+        speed = float(self.speed)
+        if speed <= 1.0:
+            # Repeating indices provides a useful slow-motion mode while still
+            # presenting every collision-audited fixed-path sample.
+            count = int(math.ceil((length - 1) / speed)) + 1
+            indices = [
+                min(length - 1, int(index * speed))
+                for index in range(count)
+            ]
+            if indices[-1] != length - 1:
+                indices.append(length - 1)
+            return indices
+
+        protected = {0, length - 1}
+        for track in tracks:
+            protected.update(
+                {
+                    track.app_frame,
+                    track.tcp_frame,
+                    2 * track.tcp_frame - track.app_frame,
+                    len(track.frames) - 1,
+                }
+            )
+            if track.contact_start_frame is not None:
+                protected.add(track.contact_start_frame)
+        sampled = {
+            min(length - 1, int(index * speed))
+            for index in range(int(math.ceil((length - 1) / speed)) + 1)
+        }
+        return sorted(
+            sampled
+            | {min(length - 1, max(0, int(index))) for index in protected}
+        )
 
     def run_tracks(
         self,
@@ -4597,7 +4720,7 @@ class AssemblyRuntime:
                 )
                 return
 
-            for frame_index in range(length):
+            for frame_index in self.visual_frame_indices(tracks, length):
                 positions = {
                     track.robot: track.frames[min(frame_index, len(track.frames) - 1)]
                     for track in tracks
@@ -4747,12 +4870,6 @@ class AssemblyRuntime:
     def place(self, robot: str, stem: str, key: str, station: str) -> tuple[Track, Callable[[], None]]:
         def release() -> None:
             self.snap_part(key, station)
-            # R3 retracts its short rail fingers while still closed.  Opening
-            # inside the cabinet would sweep the jaws through the side wall;
-            # the following pick/transfer action opens them after the arm has
-            # returned to its clear APP/stow posture.
-            if not (robot == "R3" and stem in {"RAIL_PLACE_A", "RAIL_PLACE_B"}):
-                self.set_gripper(robot, True, key)
         track = self.track(robot, stem)
         if self.assembly is not None:
             # Only the carried part may contact the product on APP -> TCP.
@@ -4824,6 +4941,15 @@ class AssemblyRuntime:
             {item[0].robot: item[1] for item in entries},
             simulate=self.simulate,
         )
+        # Keep a parallel gripper at its collision-checked closed width while
+        # it retracts vertically from a placed part.  Opening at the contact
+        # TCP can sweep a finger sideways into a neighbouring DIN rail (EDS
+        # is the tightest case).  The part is released at TCP by the callback;
+        # jaws open only after the arm has returned to its safe stow.
+        for track, _ in entries:
+            key = PLACE_PART.get((track.robot, track.stem or ""))
+            if key is not None:
+                self.set_gripper(track.robot, True, key)
         produced = set(emits)
         self.events.update(produced)
         if produced:
@@ -4886,12 +5012,69 @@ class AssemblyRuntime:
             if self.simulate:
                 self.scene.client.step()
 
-    def conveyor_to_bin(self) -> None:
+    def clear_finished_products(self) -> None:
+        """Remove static product copies left by an earlier multi-cycle demo."""
+        roots = []
+        for handle in self.sim.getObjectsInTree(
+            self.scene.parts_parent, self.sim.handle_all, 0
+        ):
+            alias = str(self.sim.getObjectAlias(int(handle)))
+            if alias.startswith("Finished_Cabinet_"):
+                roots.append(int(handle))
+        for root in roots:
+            self.sim.removeObjects(
+                list(self.sim.getObjectsInTree(root, self.sim.handle_all, 0))
+            )
+
+    def archive_finished_product(self, cycle: int) -> int:
+        """Keep a separate static-looking copy while source parts are reset."""
         if self.assembly is None:
             raise RuntimeError("assembly root does not exist")
-        print("[run] finished conveyor -> Finished_Bin", flush=True)
+        source_tree = list(
+            self.sim.getObjectsInTree(self.assembly, self.sim.handle_all, 0)
+        )
+        copies = [
+            int(handle)
+            for handle in self.sim.copyPasteObjects(source_tree, 0)
+        ]
+        copied = set(copies)
+        roots = [
+            handle
+            for handle in copies
+            if int(self.sim.getObjectParent(handle)) not in copied
+        ]
+        if len(roots) != 1:
+            if copies:
+                self.sim.removeObjects(copies)
+            raise RuntimeError(
+                f"cycle {cycle}: expected one copied cabinet root, got {len(roots)}"
+            )
+        root = roots[0]
+        self.sim.setObjectParent(root, self.scene.parts_parent, True)
+        for handle in self.sim.getObjectsInTree(root, self.sim.handle_all, 0):
+            alias = str(self.sim.getObjectAlias(int(handle)))
+            self.sim.setObjectAlias(int(handle), f"C{cycle}_{alias}")
+            if int(self.sim.getObjectType(int(handle))) == int(self.sim.object_shape_type):
+                self.sim.setObjectInt32Param(
+                    int(handle), self.sim.shapeintparam_static, 1
+                )
+        self.sim.setObjectAlias(root, f"Finished_Cabinet_{cycle}")
+        return root
+
+    def conveyor_to_bin(self, cycle: int = 1) -> None:
+        if self.assembly is None:
+            raise RuntimeError("assembly root does not exist")
+        if cycle < 1 or cycle > 3:
+            raise ValueError("finished-product queue supports cycle 1..3")
+        # Fill from the far end toward the line.  A later cabinet therefore
+        # stops before an earlier one instead of visually passing through it.
+        destination_x = 2.05 - 0.37 * (cycle - 1)
+        print(
+            f"[run] cabinet {cycle} -> finished queue x={destination_x:.2f}",
+            flush=True,
+        )
         start = list(self.sim.getObjectPosition(self.assembly, -1))
-        end = [2.05, -0.92, 0.20]
+        end = [destination_x, -0.92, 0.20]
         for index in range(1, 101):
             blend = quintic(index / 100.0)
             self.sim.setObjectPosition(
@@ -4905,9 +5088,9 @@ class AssemblyRuntime:
 def process_stages() -> list[list[tuple[str, str]]]:
     """Robot-motion groups; conveyor index steps occur between these groups."""
     return [
-        [("R1", "SHELL_PICK"), ("R2", "RAIL_PICK_H"), ("R3", "RAIL_PICK_A")],
-        [("R1", "WB1_PLACE")], [("R2", "RAIL_PLACE_H")],
-        [("R3", "RAIL_PLACE_A")], [("R3", "RAIL_PICK_B")],
+        [("R1", "SHELL_PICK")], [("R1", "WB1_PLACE")],
+        [("R2", "RAIL_PICK_H")], [("R2", "RAIL_PLACE_H")],
+        [("R3", "RAIL_PICK_A")], [("R3", "RAIL_PLACE_A")], [("R3", "RAIL_PICK_B")],
         [("R3", "RAIL_PLACE_B")],
         [("R4", "PSU_PICK")], [("R4", "PSU_PLACE")],
         [("R4", "SERVO_PICK")], [("R4", "SERVO_PLACE")],
@@ -4916,7 +5099,7 @@ def process_stages() -> list[list[tuple[str, str]]]:
         [("R5", "DMA_PICK")], [("R5", "DMA_PLACE")],
         [("R6", "CONTACTOR_PICK")], [("R6", "CONTACTOR_PLACE")],
         [("R6", "BREAKER_PICK")], [("R6", "BREAKER_PLACE")],
-        [("R6", "COM5_PICK")], [("R6", "COM5_PLACE")],
+        [("R8", "COM5_PICK")], [("R8", "COM5_PLACE")],
         [("R8", "FILTER_PICK")], [("R8", "FILTER_PLACE")],
         [("R7", "SCREW_1")], [("R7", "SCREW_2")],
         [("R7", "SCREW_3")], [("R7", "SCREW_4")],
@@ -4926,29 +5109,37 @@ def process_stages() -> list[list[tuple[str, str]]]:
 def run_wb1_process(runtime: AssemblyRuntime) -> None:
     """Execute the complete first shared-workspace process."""
     p1 = runtime.pick("R1", "SHELL_PICK", "shell")
-    p2 = runtime.pick("R2", "RAIL_PICK_H", "rail_h")
-    p3 = runtime.pick("R3", "RAIL_PICK_A", "rail_a")
     runtime.execute_pair(
-        [p1, p2, p3],
-        "R1/R2/R3 parallel material pick",
-        emits=("WB1_MATERIALS_HELD",),
+        [p1],
+        "R1 shell pick",
+        emits=("SHELL_HELD",),
     )
     runtime.execute_pair(
         [runtime.place("R1", "WB1_PLACE", "shell", "wb1")],
         "R1 shell -> WB1",
-        wait_for=("WB1_MATERIALS_HELD",),
+        wait_for=("SHELL_HELD",),
         emits=("SHELL_AT_WB1",),
+    )
+    runtime.execute_pair(
+        [runtime.pick("R2", "RAIL_PICK_H", "rail_h")],
+        "R2 horizontal rail pick",
+        wait_for=("SHELL_AT_WB1",), emits=("RAIL_H_HELD",),
     )
     runtime.execute_pair(
         [runtime.place("R2", "RAIL_PLACE_H", "rail_h", "wb1")],
         "R2 horizontal rail install",
-        wait_for=("SHELL_AT_WB1",),
+        wait_for=("RAIL_H_HELD",),
         emits=("RAIL_H_DONE",),
+    )
+    runtime.execute_pair(
+        [runtime.pick("R3", "RAIL_PICK_A", "rail_a")],
+        "R3 vertical rail A pick",
+        wait_for=("RAIL_H_DONE",), emits=("RAIL_A_HELD",),
     )
     runtime.execute_pair(
         [runtime.place("R3", "RAIL_PLACE_A", "rail_a", "wb1")],
         "R3 vertical rail A install",
-        wait_for=("RAIL_H_DONE",),
+        wait_for=("RAIL_A_HELD",),
         emits=("RAIL_A_DONE",),
     )
     runtime.index_pallet(
@@ -5009,6 +5200,10 @@ R6_WB2_TASKS = (
     ("R6", "CONTACTOR", "contactor"),
     ("R6", "BREAKER", "breaker"),
 )
+R8_STAGING_TASKS = (
+    ("R8", "COM5", "com5"),
+    ("R8", "FILTER", "filter"),
+)
 
 
 def run_through_r4_process(runtime: AssemblyRuntime) -> str:
@@ -5044,25 +5239,14 @@ def run_through_r6_process(runtime: AssemblyRuntime) -> str:
         wait_for=(previous_event,),
         emits="STAGING_READY",
     )
-
-    runtime.execute_pair(
-        [runtime.pick("R6", "COM5_PICK", "com5")],
-        "R6 COM5 pick",
-        wait_for=("STAGING_READY",),
-        emits=("COM5_HELD",),
-    )
-    runtime.execute_pair(
-        [runtime.place("R6", "COM5_PLACE", "com5", "staging")],
-        "R6 COM5 install",
-        wait_for=("COM5_HELD",),
-        emits=("COM5_DONE",),
-    )
-    return "COM5_DONE"
+    return "STAGING_READY"
 
 
 def run_through_r7_process(runtime: AssemblyRuntime) -> str:
     previous_event = run_through_r6_process(runtime)
-    previous_event = run_device_tasks(runtime, [("R8","FILTER","filter")], previous_event, station="staging")
+    previous_event = run_device_tasks(
+        runtime, R8_STAGING_TASKS, previous_event, station="staging"
+    )
     for index in range(1, 5):
         screw_track = runtime.track("R7", f"SCREW_{index}")
         screw_event = f"SCREW_{index}_DONE"
@@ -5133,11 +5317,20 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--skip-preflight", action="store_true")
     parser.add_argument("--speed", type=float, default=1.0, help="0.2..3.0; larger is faster")
+    parser.add_argument(
+        "--cycles",
+        type=int,
+        choices=(1, 2, 3),
+        default=1,
+        help="assemble 1..3 cabinets continuously; completed cabinets remain visible",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if not 0.2 <= args.speed <= 3.0:
+        raise RuntimeError("--speed must be between 0.2 and 3.0")
     require_open_top_shell()
     scene_path = args.scene.expanduser().resolve()
     plan_path = args.plan.expanduser().resolve()
@@ -5162,6 +5355,8 @@ def main() -> int:
         raise RuntimeError("the simulation must be stopped before this controller starts")
 
     if args.plan_robot:
+        if args.cycles != 1:
+            raise RuntimeError("--cycles is only valid for process playback")
         if (
             args.audit_existing_plan or args.preflight_only
             or args.preflight_wb1 or args.preflight_r4
@@ -5195,6 +5390,8 @@ def main() -> int:
         args.preflight_wb1 or args.preflight_r4
         or args.preflight_r5 or args.preflight_r6 or args.preflight_r7
     ):
+        if args.cycles != 1:
+            raise RuntimeError("--cycles cannot be combined with preflight modes")
         if args.preflight_only:
             raise RuntimeError(
                 "partial preflight cannot be combined with --preflight-only"
@@ -5239,6 +5436,8 @@ def main() -> int:
             validate_checkpoint_stows(scene, plan)
         print(f"[plan] auditing partial checkpoint {plan_path}")
     elif args.audit_existing_plan:
+        if args.cycles != 1:
+            raise RuntimeError("--cycles cannot be combined with audit mode")
         if not args.preflight_only:
             raise RuntimeError("--audit-existing-plan requires --preflight-only")
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -5260,6 +5459,8 @@ def main() -> int:
     if args.plan_only:
         return 0
     runtime = AssemblyRuntime(scene, plan, args.speed)
+    if args.cycles > 1:
+        runtime.clear_finished_products()
     runtime.reset_product()
     scene.set_all_home()
     scene.install_batch_script()
@@ -5326,11 +5527,30 @@ def main() -> int:
         client.setStepping(True)
         scene.sim.startSimulation()
         client.step()
-        run_process(runtime)
+        for cycle in range(1, args.cycles + 1):
+            print(
+                f"[cycle {cycle}/{args.cycles}] cabinet assembly start",
+                flush=True,
+            )
+            run_process(runtime)
+            if args.cycles > 1:
+                runtime.conveyor_to_bin(cycle)
+            print(
+                f"[cycle {cycle}/{args.cycles}] cabinet assembly complete",
+                flush=True,
+            )
+            if cycle < args.cycles:
+                runtime.archive_finished_product(cycle)
+                runtime.reset_product()
+                runtime.events.clear()
         scene.sim.pauseSimulation()
         client.setStepping(False)
         scene.remove_batch_script()
-        print("[done] cabinet assembly complete; simulation is paused at the output pallet stop")
+        location = "finished queue" if args.cycles > 1 else "output pallet stop"
+        print(
+            f"[done] {args.cycles} cabinet cycle(s) complete; "
+            f"simulation is paused at the {location}"
+        )
         return 0
     except Exception:
         try:

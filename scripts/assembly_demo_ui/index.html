@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HXGN-12 电控柜八臂协同装配系统</title>
+<style>
+:root{
+  --bg:#0b1220; --panel:#121a2b; --panel2:#182338; --line:#22314d;
+  --text:#dbe7f5; --muted:#7d92b5; --accent:#38bdf8; --accent2:#0ea5e9;
+  --ok:#34d399; --warn:#fbbf24; --err:#f87171; --violet:#a78bfa;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(1200px 600px at 80% -10%, #16243c 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, #101c33 0%, transparent 55%),
+    var(--bg);
+  color:var(--text);
+  font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  display:flex;flex-direction:column;min-height:100vh;
+}
+header{
+  display:flex;align-items:center;gap:16px;padding:14px 24px;
+  border-bottom:1px solid var(--line);background:rgba(11,18,32,.85);
+  backdrop-filter:blur(6px);position:sticky;top:0;z-index:50;
+}
+.logo{
+  width:38px;height:38px;border-radius:10px;flex:0 0 auto;
+  background:linear-gradient(135deg,var(--accent),#6366f1);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;color:#06121f;font-size:15px;
+}
+h1{font-size:19px;letter-spacing:.5px;font-weight:700}
+.sub{font-size:12px;color:var(--muted);margin-top:2px;letter-spacing:1px}
+.chips{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.chip{
+  font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);
+  color:var(--muted);background:var(--panel);white-space:nowrap;
+}
+.chip b{color:var(--text)}
+.chip.ok{border-color:#1e5c47;color:var(--ok)}
+.chip.warn{border-color:#6b5210;color:var(--warn)}
+.chip.err{border-color:#7c2d33;color:var(--err)}
+main{flex:1;display:grid;grid-template-columns:300px 1fr;gap:18px;padding:18px 24px;max-width:1560px;width:100%;margin:0 auto}
+/* ---------- wizard ---------- */
+aside{display:flex;flex-direction:column;gap:12px}
+.step{
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:16px;cursor:pointer;transition:.18s;position:relative;overflow:hidden;
+}
+.step.locked{opacity:.45;cursor:not-allowed}
+.step:not(.locked):hover{border-color:var(--accent2);transform:translateY(-1px)}
+.step.done{border-color:#1e5c47}
+.step.done::after{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ok);
+}
+.step.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.step .row{display:flex;align-items:center;gap:12px}
+.num{
+  width:34px;height:34px;border-radius:10px;flex:0 0 auto;font-weight:800;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+  background:#0d1a2f;border:1px solid var(--line);color:var(--muted);
+}
+.step.done .num{background:#0d2c22;border-color:#1e5c47;color:var(--ok)}
+.step.active .num{background:#0c2c42;border-color:var(--accent);color:var(--accent)}
+.step h3{font-size:15px;font-weight:600}
+.step p{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5}
+.state{font-size:11px;margin-top:8px;display:inline-block;padding:2px 8px;border-radius:6px;background:#0d1a2f;color:var(--muted)}
+.step.done .state{color:var(--ok)}
+/* ---------- panel ---------- */
+section.panel{
+  background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:22px;min-width:0;display:flex;flex-direction:column;gap:16px;
+}
+.panel h2{font-size:17px;font-weight:700;display:flex;align-items:center;gap:10px}
+.panel h2 .tag{font-size:11px;font-weight:500;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+.hint{font-size:13px;color:var(--muted);line-height:1.7}
+.preview-wrap{
+  border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0d1728;
+}
+.preview-wrap img{width:100%;display:block}
+.stats{display:flex;gap:12px;flex-wrap:wrap}
+.stat{
+  flex:1;min-width:140px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:12px;padding:12px 14px;
+}
+.stat .k{font-size:12px;color:var(--muted)}
+.stat .v{font-size:20px;font-weight:800;margin-top:4px;color:var(--accent)}
+.stat .v small{font-size:12px;color:var(--muted);font-weight:400}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--muted);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #1a2740}
+tbody tr:hover{background:#16233b}
+tbody tr.row-hl{background:#0c2c42 !important}
+tbody tr:last-child td{border-bottom:none}
+.mono{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.scroll{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+/* disassembly */
+.ds-list{display:flex;flex-direction:column;gap:8px}
+.ds-item{
+  display:flex;align-items:center;gap:12px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:10px;padding:10px 14px;
+  opacity:0;transform:translateY(8px);transition:.35s;
+}
+.ds-item.show{opacity:1;transform:none}
+.ds-seq{font-family:var(--mono);color:var(--accent);font-weight:700;font-size:13px;flex:0 0 30px}
+.ds-robot{
+  flex:0 0 44px;background:#0c2c42;border:1px solid var(--accent2);color:var(--accent);
+  border-radius:8px;text-align:center;padding:4px 0;font-weight:700;font-size:12px;
+}
+.ds-op{font-size:13.5px;flex:1}
+.ds-parts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.part-chip{font-size:11.5px;background:#0d1a2f;border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--text)}
+.progress{height:8px;border-radius:999px;background:#0d1a2f;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent2),var(--ok));transition:width .3s}
+.banner{
+  border-radius:12px;padding:14px 18px;font-size:14px;font-weight:600;
+  display:none;align-items:center;gap:10px;
+}
+.banner.show{display:flex;animation:pop .35s}
+.banner.ok{background:#0d2c22;border:1px solid #1e5c47;color:var(--ok)}
+.banner.err{background:#3a161c;border:1px solid #7c2d33;color:var(--err)}
+@keyframes pop{from{transform:scale(.96);opacity:0}}
+/* assignment */
+.cell-map{border:1px solid var(--line);border-radius:12px;background:#0d1728;overflow:hidden}
+.cell-map svg{width:100%;height:auto;display:block}
+.arms{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.arm{
+  background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;
+  opacity:0;transform:translateY(10px);transition:.4s;
+}
+.arm.show{opacity:1;transform:none}
+.arm .head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.arm .id{
+  background:linear-gradient(135deg,var(--accent),#6366f1);color:#06121f;
+  border-radius:8px;padding:3px 8px;font-weight:800;font-size:12.5px;
+}
+.arm .role{font-size:12.5px;font-weight:600;flex:1;line-height:1.4}
+.arm .meta{font-size:11.5px;color:var(--muted);line-height:1.7}
+.arm .parts{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+.arm .parts span{font-size:10.5px;background:#0d1a2f;border:1px solid var(--line);border-radius:999px;padding:2px 7px}
+/* console */
+.console{
+  background:#070d18;border:1px solid var(--line);border-radius:12px;
+  font-family:var(--mono);font-size:12px;line-height:1.65;
+  height:420px;overflow:auto;padding:14px 16px;white-space:pre-wrap;word-break:break-all;
+}
+.console .l{color:#9db2ce}
+.console .l.sim{color:#7dd3fc}
+.console .l.ctrl{color:#a5f3c4}
+.console .l.empty{color:#3d5470}
+.status-cards{display:flex;gap:12px;flex-wrap:wrap}
+.scard{flex:1;min-width:230px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.scard .k{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.scard .v{font-size:15px;font-weight:700;margin-top:6px;display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+.dot.launching{background:var(--warn);animation:blink 1s infinite}
+.dot.ready,.dot.ok{background:var(--ok)}
+.dot.running{background:var(--accent);animation:blink 1s infinite}
+.dot.error{background:var(--err)}
+@keyframes blink{50%{opacity:.25}}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap}
+button.primary{
+  background:linear-gradient(135deg,var(--accent),#6366f1);color:#06121f;
+  border:none;border-radius:10px;padding:10px 22px;font-size:14.5px;font-weight:700;
+  cursor:pointer;transition:.15s;font-family:inherit;
+}
+button.primary:hover{filter:brightness(1.12)}
+button.primary:disabled{filter:grayscale(.9) brightness(.6);cursor:not-allowed}
+button.ghost{
+  background:transparent;border:1px solid var(--line);color:var(--text);
+  border-radius:10px;padding:10px 18px;font-size:13.5px;cursor:pointer;font-family:inherit;
+}
+button.ghost:hover{border-color:var(--accent2)}
+#toast{
+  position:fixed;top:18px;right:18px;z-index:99;display:flex;flex-direction:column;gap:8px;
+}
+.toast{
+  background:#3a161c;border:1px solid #7c2d33;color:#fecaca;border-radius:10px;
+  padding:10px 16px;font-size:13px;max-width:420px;animation:pop .25s;
+}
+footer{padding:10px 24px;font-size:11.5px;color:#4a5f80;border-top:1px solid var(--line);text-align:center}
+@media (max-width:1000px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">CR5</div>
+  <div>
+    <h1>HXGN-12 电控柜八臂协同装配系统</h1>
+    <div class="sub">八臂协同装配系统 · CoppeliaSim · DOBOT CR5A</div>
+  </div>
+  <div class="chips" id="chips">
+    <span class="chip" id="chip-model">模型 <b>—</b></span>
+    <span class="chip" id="chip-disasm">拆解工艺 <b>—</b></span>
+    <span class="chip" id="chip-assign">任务分配 <b>—</b></span>
+    <span class="chip" id="chip-sim">CoppeliaSim <b>未启动</b></span>
+    <span class="chip" id="chip-ctrl">控制器 <b>待启动</b></span>
+  </div>
+</header>
+<main>
+  <aside id="wizard"></aside>
+  <section class="panel" id="panel"></section>
+</main>
+<footer>HXGN-12 电控柜八臂协同装配演示界面 · 数据来自 configs/*.yaml 与 models/cabinet/processed · 运行按钮真实唤起 CoppeliaSim 与装配控制器</footer>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s, el=document) => el.querySelector(s);
+const api = async (path, opts={}) => {
+  const res = await fetch(path, {
+    headers: {"Content-Type":"application/json"},
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(()=>({ok:false,message:`HTTP ${res.status}`}));
+  if (!res.ok || data.ok === false) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+};
+function toast(msg){
+  const el = document.createElement("div");
+  el.className = "toast"; el.textContent = msg;
+  $("#toast").appendChild(el);
+  setTimeout(()=>el.remove(), 5200);
+}
+
+const STEPS = [
+  {key:"import",   num:1, title:"导入电控柜模型",   sub:"加载柜体与 13 类元器件的三角网格模型,生成整柜预览", btn:"导入电控柜模型",   run:stepImport},
+  {key:"disasm",   num:2, title:"拆解工艺",         sub:"按装配依赖逆序生成拆解工序,逐件拆除",           btn:"拆解工艺",         run:stepDisasm},
+  {key:"assign",   num:3, title:"分配任务",         sub:"将装配工序按工位分配到 8 台 CR5A 机械臂",       btn:"分配任务",         run:stepAssign},
+  {key:"launch",   num:4, title:"运行装配任务",     sub:"唤起 CoppeliaSim 并加载八臂装配场景",           btn:"运行装配任务",     run:stepLaunch},
+  {key:"start",    num:5, title:"开始装配",         sub:"启动装配控制器,开始整线装配运行",               btn:"开始",             run:stepStart},
+];
+const done = new Set();
+let cache = {};
+
+function renderWizard(){
+  const el = $("#wizard"); el.innerHTML = "";
+  STEPS.forEach((s, i) => {
+    const unlocked = i === 0 || done.has(STEPS[i-1].key);
+    const card = document.createElement("div");
+    card.className = "step" + (done.has(s.key) ? " done" : "") + (!unlocked ? " locked" : "");
+    card.innerHTML = `
+      <div class="row">
+        <div class="num">${s.num}</div>
+        <div><h3>${s.title}</h3><p>${s.sub}</p></div>
+      </div>
+      <span class="state">${done.has(s.key) ? "✓ 已完成" : (unlocked ? "可执行" : "等待上一步")}</span>`;
+    if (unlocked && !done.has(s.key)) {
+      card.addEventListener("click", () => s.run(card));
+    }
+    el.appendChild(card);
+  });
+}
+function markDone(key){
+  done.add(key);
+  renderWizard();
+  updateChips();
+}
+
+/* ================= step 1: 导入模型 ================= */
+async function stepImport(card){
+  card.classList.add("active");
+  $("#panel").innerHTML = `<h2>正在导入电控柜模型<span class="tag">加载中</span></h2><div class="hint">读取 models/cabinet/processed 并渲染整柜网格预览 …</div>`;
+  try{
+    const data = await api("/api/import_model", {method:"POST"});
+    cache.model = data;
+    $("#panel").innerHTML = `
+      <h2>电控柜模型<span class="tag">HXGN-12</span></h2>
+      <div class="preview-wrap"><img id="preview-img" src="/preview.png?v=${Date.now()}" alt="电控柜模型预览"></div>
+      <div class="hint" style="margin-top:-4px">SolidWorks 风格成品柜渲染(透视 + 材质光照 + 软阴影)。点击下方零件行,预览图中对应零件将以青色点亮;再次点击恢复整柜视图。</div>
+      <div class="stats">
+        <div class="stat"><div class="k">零部件数量</div><div class="v">${data.count}<small> 件(含预装内安装板)</small></div></div>
+        <div class="stat"><div class="k">三角面总数</div><div class="v">${(data.total_tris/1e4).toFixed(1)}<small> 万</small></div></div>
+        <div class="stat"><div class="k">整柜包围盒</div><div class="v">${data.size_mm[0]}<small>×${data.size_mm[1]}×${data.size_mm[2]} mm</small></div></div>
+      </div>
+      <div class="scroll"><table>
+        <thead><tr><th>#</th><th>零件</th><th>来源文件</th><th>三角面</th><th>尺寸 (mm)</th></tr></thead>
+        <tbody>${data.parts.map((p,i)=>`
+          <tr><td>${i+1}</td><td>${p.display}</td><td class="mono">${p.source}</td>
+          <td class="mono">${p.tris.toLocaleString()}</td><td class="mono">${p.bbox_mm.join("×")}</td></tr>`).join("")}
+        </tbody></table></div>
+      <div class="banner ok show">✓ 电控柜模型导入成功</div>`;
+    document.querySelectorAll("#panel tbody tr").forEach((tr, i) => {
+      const part = data.parts[i];
+      tr.style.cursor = "pointer";
+      tr.title = "点击在预览中高亮该零件";
+      tr.addEventListener("click", () => {
+        const img = $("#preview-img");
+        if (tr.classList.contains("row-hl")){
+          tr.classList.remove("row-hl");
+          img.src = "/preview.png?v=" + Date.now();
+        } else {
+          document.querySelectorAll("#panel tbody tr.row-hl").forEach(r => r.classList.remove("row-hl"));
+          tr.classList.add("row-hl");
+          img.src = "/preview.png?part=" + encodeURIComponent(part.key) + "&v=" + Date.now();
+        }
+      });
+    });
+    markDone("import");
+  }catch(e){ toast("模型导入失败: " + e.message); }
+  finally{ card.classList.remove("active"); }
+}
+
+/* ================= step 2: 拆解工艺 ================= */
+async function stepDisasm(card){
+  card.classList.add("active");
+  $("#panel").innerHTML = `<h2>拆解工艺<span class="tag">生成中</span></h2><div class="hint">正在按装配依赖逆序生成拆解工序 …</div>`;
+  try{
+    const data = await api("/api/disassemble", {method:"POST"});
+    cache.disasm = data;
+    $("#panel").innerHTML = `
+      <h2>拆解工艺<span class="tag">共 ${data.count} 道工序</span></h2>
+      <div class="hint">${data.notes.join(" · ")}</div>
+      <div class="progress"><i id="dsbar"></i></div>
+      <div class="ds-list" id="dslist"></div>
+      <div class="banner" id="dsbanner">✓ 拆解成功</div>`;
+    const list = $("#dslist"), bar = $("#dsbar");
+    data.steps.forEach((s, i) => {
+      const item = document.createElement("div");
+      item.className = "ds-item";
+      item.innerHTML = `
+        <span class="ds-seq">${String(s.seq).padStart(2,"0")}</span>
+        <span class="ds-robot">${s.robot}</span>
+        <span class="ds-op">${s.operation}${s.parts.length ? " — 拆出 " + s.parts.join("、") : ""}</span>
+        <span class="ds-parts"><span class="part-chip">${s.tool}</span></span>`;
+      list.appendChild(item);
+      setTimeout(()=>{
+        item.classList.add("show");
+        bar.style.width = ((i+1)/data.steps.length*100) + "%";
+        if (i === data.steps.length - 1){
+          setTimeout(()=>{ $("#dsbanner").classList.add("show"); markDone("disasm"); }, 350);
+        }
+      }, 260*(i+1));
+    });
+  }catch(e){ toast("拆解工艺生成失败: " + e.message); }
+  finally{ card.classList.remove("active"); }
+}
+
+/* ================= step 3: 分配任务 ================= */
+function cellMap(arms){
+  const px = (x) => (x + 4.35) * 150, py = (y) => (1.25 - y) * 150;
+  const ws = [
+    {id:"工位 1", c:[-3.15,0.25], w:1.55, h:1.05, label:"壳体与导轨基础装配"},
+    {id:"工位 2", c:[-1.20,0.25], w:1.55, h:1.05, label:"电力电子器件安装"},
+    {id:"工位 3", c:[ 0.05,0.25], w:1.55, h:1.05, label:"通讯模块、滤波器与紧固"},
+  ];
+  const shapes = [];
+  ws.forEach(w => shapes.push(
+    `<rect x="${px(w.c[0]-w.w/2)}" y="${py(w.c[1]+w.h/2)}" width="${w.w*150}" height="${w.h*150}"
+      rx="14" fill="none" stroke="#2b4363" stroke-dasharray="6 5"/>
+     <text x="${px(w.c[0])}" y="${py(w.c[1]-w.h/2-0.08)}" text-anchor="middle"
+      fill="#5f7ba3" font-size="11">${w.id} · ${w.label}</text>`));
+  shapes.push(
+    `<rect x="${px(-4.35)}" y="${py(0.37)}" width="${px(1.25)-px(-4.35)}" height="${py(0.13)-py(0.37)}" fill="#152238" stroke="#2b4363"/>
+     <text x="${px(-4.0)}" y="${py(0.44)}" fill="#4f6b93" font-size="10">索引托盘输送线</text>`);
+  Object.entries(arms).forEach(([id, a]) => {
+    const [x,y] = a.position;
+    shapes.push(
+      `<circle cx="${px(x)}" cy="${py(y)}" r="11" fill="#0c2c42" stroke="#38bdf8" stroke-width="1.6"/>
+       <text x="${px(x)}" y="${py(y)+4}" text-anchor="middle" fill="#7dd3fc" font-size="11" font-weight="700">${id}</text>
+       <text x="${px(x)}" y="${py(y)-16}" text-anchor="middle" fill="#9db2ce" font-size="8.5">${a.tools[0] || ""}</text>`);
+  });
+  return `<svg viewBox="0 0 ${px(1.5)} ${py(-1.35)}" xmlns="http://www.w3.org/2000/svg">${shapes.join("")}</svg>`;
+}
+
+async function stepAssign(card){
+  card.classList.add("active");
+  $("#panel").innerHTML = `<h2>任务分配<span class="tag">分配中</span></h2><div class="hint">正在读取装配任务分配契约并下发到 8 台机械臂 …</div>`;
+  try{
+    const data = await api("/api/assign", {method:"POST"});
+    cache.assign = data;
+    $("#panel").innerHTML = `
+      <h2>任务分配<span class="tag">${data.tasks.length} 道工序 / ${data.arm_order.length} 台机械臂</span></h2>
+      <div class="cell-map">${cellMap(data.arms)}</div>
+      <div class="arms" id="armgrid"></div>
+      <div class="scroll"><table>
+        <thead><tr><th>#</th><th>工序</th><th>机械臂</th><th>工位</th><th>工具</th><th>零件</th><th>前置工序</th></tr></thead>
+        <tbody>${data.tasks.map((t,i)=>`
+          <tr><td>${i+1}</td><td>${t.operation}</td><td><b>${t.robot}</b></td>
+          <td>${t.workspace.replace("public_workspace_","工位 ")}</td><td>${t.tool_label}</td>
+          <td>${t.parts_display.join("、")||"—"}</td>
+          <td class="mono">${t.after.join("、")||"—"}</td></tr>`).join("")}
+        </tbody></table></div>
+      <div class="banner" id="asbanner">✓ 已成功分配到各个机械臂</div>`;
+    const grid = $("#armgrid");
+    data.arm_order.forEach((id, i) => {
+      const a = data.arms[id];
+      const cardEl = document.createElement("div");
+      cardEl.className = "arm";
+      cardEl.innerHTML = `
+        <div class="head"><span class="id">${id}</span><span class="role">${a.name_cn}</span></div>
+        <div class="meta">${a.model} · 基座 (${a.position.map(v=>v.toFixed(2)).join(", ")}) m<br>
+        工序 ${a.tasks.length} 道 · 工具:${a.tools.join(" / ")||"—"}</div>
+        <div class="parts">${(a.parts_display||[]).map(p=>`<span>${p}</span>`).join("")}</div>`;
+      grid.appendChild(cardEl);
+      setTimeout(()=>{
+        cardEl.classList.add("show");
+        if (i === data.arm_order.length - 1){
+          setTimeout(()=>{ $("#asbanner").classList.add("show"); markDone("assign"); }, 300);
+        }
+      }, 160*(i+1));
+    });
+  }catch(e){ toast("任务分配失败: " + e.message); }
+  finally{ card.classList.remove("active"); }
+}
+
+/* ================= step 4-5: 运行与开始 ================= */
+let logOffset = 0, logTimer = null, simTimer = null;
+let simReady = false;
+let lastWizardKey = "";
+
+function statusCard(){
+  return `
+    <div class="scard">
+      <div class="k"><span class="dot" id="simdot"></span>CoppeliaSim 八臂系统</div>
+      <div class="v" id="simstate">未启动</div>
+      <div class="meta" style="font-size:11.5px;color:var(--muted);margin-top:6px" id="simhint">点击左侧「运行装配任务」唤起 CoppeliaSim 并加载场景</div>
+    </div>
+    <div class="scard">
+      <div class="k"><span class="dot" id="ctrldot"></span>装配控制器</div>
+      <div class="v" id="ctrlstate">待启动</div>
+      <div class="meta" style="font-size:11.5px;color:var(--muted);margin-top:6px">CoppeliaSim 就绪后点击「开始」运行装配</div>
+    </div>`;
+}
+
+async function stepLaunch(card){
+  card.classList.add("active");
+  $("#panel").innerHTML = `
+    <h2>运行装配任务<span class="tag">唤起 CoppeliaSim</span></h2>
+    <div class="status-cards">${statusCard()}</div>
+    <div class="console" id="logbox"><span class="l empty">正在发起启动请求 …</span></div>`;
+  startLogPolling();
+  startSimPolling();
+  try{
+    await api("/api/launch_sim", {method:"POST"});
+    markDone("launch");
+  }catch(e){ toast("唤起失败: " + e.message); updateSimState(); }
+  finally{ card.classList.remove("active"); }
+}
+
+function refreshStepPanel(){
+  $("#panel").innerHTML = `
+    <h2>装配运行监控<span class="tag">CoppeliaSim + 控制器</span></h2>
+    <div class="status-cards">${statusCard()}</div>
+    <div class="console" id="logbox"><span class="l empty">日志将在此显示 …</span></div>`;
+  startLogPolling();
+}
+
+async function stepStart(card){
+  card.classList.add("active");
+  refreshStepPanel();
+  try{
+    await api("/api/start_assembly", {method:"POST"});
+    markDone("start");
+  }catch(e){ toast("启动失败: " + e.message); updateChips(); updateSimState(); }
+  finally{ card.classList.remove("active"); }
+}
+
+async function pollLog(){
+  const data = await api("/api/log?since=" + logOffset);
+  logOffset = data.total;
+  const box = $("#logbox");
+  if (!box) return;
+  if (data.lines.length){
+    box.querySelector(".l.empty")?.remove();
+    data.lines.forEach(line => {
+      const div = document.createElement("div");
+      const tag = line.startsWith("[sim]") ? "sim" : line.startsWith("[ctrl]") ? "ctrl" : "l";
+      div.className = "l " + tag;
+      div.textContent = line;
+      box.appendChild(div);
+    });
+    box.scrollTop = box.scrollHeight;
+    if (data.lines.some(l => l.includes("[done] cabinet assembly complete"))){
+      const b = document.createElement("div");
+      b.className = "banner ok show"; b.textContent = "✓ 装配完成";
+      box.parentElement.insertBefore(b, box.nextSibling);
+    }
+  }
+}
+function startLogPolling(){
+  if (logTimer) return;
+  pollLog().catch(()=>{});
+  logTimer = setInterval(()=>pollLog().catch(()=>{}), 1200);
+}
+const SIM_TEXT = {
+  idle: ["未启动", "点击左侧「运行装配任务」唤起 CoppeliaSim 并加载场景"],
+  launching: ["启动中 …", "CoppeliaSim 正在加载八臂装配场景,请稍候"],
+  ready: ["已就绪", "仿真服务停止态,可以点击「开始」运行装配"],
+  running: ["运行中", "仿真正在步进运行"],
+  error: ["启动失败", "请检查 COPPELIASIM_ROOT 与场景文件,详见日志"],
+};
+async function updateSimState(){
+  const data = await api("/api/state");
+  const st = data.state;
+  const wizardKey = st.sim + "|" + st.ctrl + "|" + st.ctrl_exit_code;
+  if (wizardKey !== lastWizardKey){
+    lastWizardKey = wizardKey;
+    renderWizard();
+  }
+  const [text, hint] = SIM_TEXT[st.sim] || ["未知", ""];
+  simReady = (st.sim === "ready");
+  const chip = $("#chip-sim");
+  chip.querySelector("b").textContent = text;
+  chip.className = "chip" + (st.sim==="ready" ? " ok" : st.sim==="error" ? " err" : st.sim==="launching"||st.sim==="running" ? " warn" : "");
+  const sdot = $("#simdot"), sstate = $("#simstate"), shint = $("#simhint");
+  if (sdot){
+    sdot.className = "dot " + (st.sim==="launching"||st.sim==="running" ? "launching" : st.sim==="ready" ? "ready" : st.sim==="error" ? "error" : "");
+    sstate.textContent = text; shint.textContent = hint;
+  }
+  const [ct, ch] = {idle:["待启动",""], running:["运行中",""], exited:["已结束 (exit "+st.ctrl_exit_code+")",""], error:["错误",""]}[st.ctrl] || ["未知",""];
+  $("#chip-ctrl").querySelector("b").textContent = ct;
+  $("#chip-ctrl").className = "chip" + (st.ctrl==="running" ? " warn" : st.ctrl==="exited" && st.ctrl_exit_code===0 ? " ok" : st.ctrl==="exited"||st.ctrl==="error" ? " err" : "");
+  const cdot = $("#ctrldot"), cstate = $("#ctrlstate");
+  if (cdot){
+    cdot.className = "dot " + (st.ctrl==="running" ? "running" : st.ctrl==="exited" && st.ctrl_exit_code===0 ? "ok" : st.ctrl==="exited"||st.ctrl==="error" ? "error" : "");
+    cstate.textContent = ct;
+  }
+}
+function startSimPolling(){
+  if (simTimer) return;
+  updateSimState().catch(()=>{});
+  simTimer = setInterval(()=>updateSimState().catch(()=>{}), 2500);
+}
+
+function updateChips(){
+  const c = (id, cls, text) => { const el = $("#"+id); el.className = "chip"+(cls?" "+cls:""); el.querySelector("b").textContent = text; };
+  if (done.has("import"))   c("chip-model",  "ok", cache.model ? cache.model.count+" 件零件" : "完成");
+  if (done.has("disasm"))   c("chip-disasm", "ok", cache.disasm ? cache.disasm.count+" 道工序" : "完成");
+  if (done.has("assign"))   c("chip-assign", "ok", "8 台机械臂");
+}
+
+renderWizard();
+updateSimState().catch(()=>{});
+</script>
+</body>
+</html>

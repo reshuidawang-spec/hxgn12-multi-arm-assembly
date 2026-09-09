@@ -1,0 +1,12 @@
+{
+  "through": "R1",
+  "passed": true,
+  "completed": [
+    "R1_SHELL_PICK",
+    "R1_WB1_PLACE"
+  ],
+  "scene": {
+    "size": 8617315,
+    "sha256": "201f2369d2f893feb09383dcbd58b03a6fc4f696685511184bb1b9a4394448e2"
+  }
+}

@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from sim_bridge.cabinet_geometry import triangles
 
 fig=plt.figure(figsize=(14,9))
-for i,(part,elev) in enumerate([('shell',65),('shell',-65),('door',65),('rail_h1',65)],1):
+for i,(part,elev) in enumerate([('shell',65),('shell',-65),('mounting_panel',65),('rail_h1',65)],1):
     ax=fig.add_subplot(2,2,i,projection='3d')
     mesh=triangles(part)
     ax.add_collection3d(Poly3DCollection(mesh,facecolor='#8fa9be',edgecolor='#324659',linewidth=.08))
@@ -22,6 +22,6 @@ for i,(part,elev) in enumerate([('shell',65),('shell',-65),('door',65),('rail_h1
     ax.view_init(elev=elev,azim=-60)
     ax.set_title(f'{part}: viewed from {"+Z" if elev>0 else "-Z"}')
     ax.set_xlabel('X (m)');ax.set_ylabel('Y (m)');ax.set_zlabel('Z (m)')
-out=Path('data/audits/20260908_geometry/cad_surfaces.png')
+out=Path('data/audits/open_top_no_door_v2/cad_surfaces.png')
 fig.tight_layout();fig.savefig(out,dpi=150)
 print(out)

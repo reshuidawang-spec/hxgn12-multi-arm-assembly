@@ -27,6 +27,11 @@ def main() -> int:
     parser.add_argument("robot")
     parser.add_argument("actions", nargs="+")
     parser.add_argument("--port", type=int, default=23000)
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="keep the first passing base position and save compact_cell.ttt",
+    )
     args = parser.parse_args()
     client = RemoteAPIClient(port=args.port)
     scene = Scene(client)
@@ -34,11 +39,17 @@ def main() -> int:
     root = scene.roots[args.robot]
     original = [float(v) for v in sim.getObjectPosition(root, -1)]
     conveyor = int(sim.getObject("/FiveCR5A_Cell/Conveyors/Central_Indexing_Conveyor"))
-    candidates = [
-        (-0.50, -0.16), (-0.50, -0.12), (-0.50, -0.08),
-        (-0.45, -0.16), (-0.55, -0.16), (-0.40, -0.16),
-        (-0.60, -0.16),
-    ]
+    candidates = (
+        [
+            (original[0]+dx, original[1]+dy)
+            for dy in (.05,.10,.15,.20)
+            for dx in (0.,-.05,.05)
+        ] if args.robot == 'R3' else [
+            (-0.50, -0.16), (-0.50, -0.12), (-0.50, -0.08),
+            (-0.45, -0.16), (-0.55, -0.16), (-0.40, -0.16),
+            (-0.60, -0.16),
+        ]
+    )
     found = None
     try:
         for x, y in candidates:
@@ -65,7 +76,7 @@ def main() -> int:
                     scene, args.robot, app, list(HOME), transit,
                     attempts=32, max_solutions=3,
                     fixed_quaternion=quaternion,
-                    include_other_robots=False,
+                    include_other_robots=True,
                 )
                 action_passed = False
                 for branch in branches:
@@ -73,7 +84,7 @@ def main() -> int:
                         cartesian_down_line(
                             scene, args.robot, branch, app, tcp, contact,
                             fixed_quaternion=quaternion,
-                            include_other_robots=False,
+                            include_other_robots=True,
                         )
                         action_passed = True
                         break
@@ -89,13 +100,22 @@ def main() -> int:
                 print(f"[PASS] base={found}", flush=True)
                 break
     finally:
-        sim.setObjectPosition(root, -1, original)
+        final_position = (
+            [found[0], found[1], original[2]]
+            if args.apply and found is not None
+            else original
+        )
+        sim.setObjectPosition(root, -1, final_position)
         scene.set_all_home()
         scene.remove_planner_script()
         sim.removeObjects(
             [int(handle) for handle in scene.down_tips.values()]
             + [int(handle) for handle in scene.virt_tips.values()]
         )
+        if args.apply and found is not None:
+            output = REPO_ROOT / "scenes" / "compact_cell.ttt"
+            sim.saveScene(str(output))
+            print(f"[saved] {output} with {args.robot} base={final_position}", flush=True)
     print({"robot": args.robot, "base": found}, flush=True)
     return 0 if found else 1
 

@@ -40,13 +40,13 @@ robots:
     name: "Dual vertical-rail installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
-    position: [-2.75, -0.35, 0.19]
+    position: [-2.75, -0.15, 0.19]
     base_object: /R3/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R3_HOME_REF
     capabilities: [vertical_rail_install, precision_pick_and_place]
     assigned_parts: [rail_v1, rail_v2]
-    end_effector: slim_gripper
+    end_effector: magnetic_gripper
     work_area: [r3_rack_area, public_workspace_1]
     tip: R3_gripper_tip
 
@@ -65,31 +65,31 @@ robots:
     tip: R4_gripper_tip
 
   R5:
-    name: "Control and filter vacuum-installation robot"
+    name: "Control-device vacuum-installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
     position: [-1.56, -0.22, 0.19]
     base_object: /R5/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R5_HOME_REF
-    capabilities: [control_device_install, filter_install, vacuum_pick_and_place]
-    assigned_parts: [plc, dma, filter]
+    capabilities: [control_device_install, vacuum_pick_and_place]
+    assigned_parts: [plc, dma]
     end_effector: vacuum
     work_area: [r5_basket_area, public_workspace_2]
     tip: R5_vacuum_tip
 
   R6:
-    name: "Switching, protection, and communication module robot"
+    name: "Switching and protection installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
     position: [-0.50, -0.08, 0.19]
     base_object: /R6/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R6_HOME_REF
-    capabilities: [switch_device_install, protection_device_install, communication_module_install, pick_and_place]
-    assigned_parts: [contactor, breaker, com5]
+    capabilities: [switch_device_install, protection_device_install, pick_and_place]
+    assigned_parts: [contactor, breaker]
     end_effector: gripper
-    work_area: [r6_basket_area, public_workspace_2, public_workspace_3]
+    work_area: [r6_basket_area, public_workspace_2]
     tip: R6_gripper_tip
 
   R7:
@@ -107,15 +107,15 @@ robots:
     tip: R7_tool_tip
 
   R8:
-    name: "Cabinet door installation and latching robot"
+    name: "Communication module and filter installation robot"
     model: DOBOT CR5A
     model_file: cr5_robot_fixed.urdf
     position: [0.35, -0.22, 0.19]
     base_object: /R8/base_link_respondable
     home_pose: [0, 0, 0, 0, 0, 0]
     home_point: R8_HOME_REF
-    capabilities: [door_install, hinge_align, latch_close, vacuum_pick_and_place]
-    assigned_parts: [door]
+    capabilities: [communication_module_install, filter_install, vacuum_pick_and_place]
+    assigned_parts: [com5, filter]
     end_effector: vacuum
-    work_area: [door_supply_area, public_workspace_3]
+    work_area: [r8_device_supply_area, public_workspace_3]
     tip: R8_vacuum_tip
