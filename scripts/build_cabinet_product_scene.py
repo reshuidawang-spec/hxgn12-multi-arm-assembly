@@ -686,9 +686,11 @@ R4_HANDOFF_CENTER = (-2.05, 0.45)
 STAGING_CENTER = (0.05, 0.25)          # S78 staging table
 REF_CENTER = (1.65, 1.25)              # compact reference display outside public workspaces
 CONVEYOR_CENTER = (-3.55, 1.35)
-INFEED_CONVEYOR_CENTER = (-5.55, 1.35)
-INFEED_CONVEYOR_LENGTH = 6.00
+INFEED_CONVEYOR_CENTER = (-6.30, 1.35)
+INFEED_CONVEYOR_LENGTH = 7.50
 INFEED_CONVEYOR_WIDTH = 0.34
+FOUR_JOB_INFEED_EXTENSION_CENTER = (-9.30, 1.35)
+FOUR_JOB_INFEED_EXTENSION_LENGTH = 1.50
 SHELL_POSITIONS = [(-3.65, 1.25)]
 PLATE_STAND_CENTER = (-3.90, -0.62)
 RAIL_RACK_CENTER = (-2.45, -0.50)
@@ -1136,6 +1138,20 @@ def update_finished_output(sim, output: Path) -> dict:
     for root in stale_roots:
         sim.removeObjects(list(_tree(sim, root)))
 
+    old_four_job_extension = [
+        int(handle)
+        for handle in _tree(sim, conveyors_parent)
+        if str(sim.getObjectAlias(handle, 0)).startswith(
+            "Cabinet_Infeed_Extension_2"
+        )
+    ]
+    old_four_job_roots = [
+        handle for handle in old_four_job_extension
+        if int(sim.getObjectParent(handle)) not in old_four_job_extension
+    ]
+    for root in old_four_job_roots:
+        sim.removeObjects(list(_tree(sim, root)))
+
     # Remove the obsolete upper-right display while preserving the hidden
     # REF_* dummies used to calculate exact final assembly transforms.
     display = [
@@ -1168,6 +1184,15 @@ def update_finished_output(sim, output: Path) -> dict:
         width=INDEX_CONVEYOR_WIDTH,
         belt_z=INDEX_BELT_TOP_Z - 0.090,
     )
+    infeed_extension = make_conveyor(
+        sim,
+        conveyors_parent,
+        prefix="Cabinet_Infeed_Extension_2",
+        center=FOUR_JOB_INFEED_EXTENSION_CENTER,
+        length=FOUR_JOB_INFEED_EXTENSION_LENGTH,
+        width=INFEED_CONVEYOR_WIDTH,
+        belt_z=BELT_TOP_Z - 0.090,
+    )
     finished_bin = make_finished_bin(sim, conveyors_parent, FINISHED_BIN_CENTER)
 
     helper_aliases = {
@@ -1190,6 +1215,7 @@ def update_finished_output(sim, output: Path) -> dict:
     sync_scene_contract(sim, output)
     return {
         "extension": extension,
+        "four_job_infeed_extension": infeed_extension,
         "finished_bin": finished_bin,
         "display_objects_removed": len(display) + len(reference_shapes),
         "runtime_helpers_removed": len(helpers),

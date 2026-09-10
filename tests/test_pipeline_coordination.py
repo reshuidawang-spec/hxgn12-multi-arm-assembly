@@ -11,7 +11,10 @@ from scripts.run_8arm_pipeline_assembly import (
     MODULE_DEPENDENCIES,
     MODULE_OPERATIONS,
     MODULE_ROBOTS,
+    PipelineJob,
+    dependencies_for_job,
     operation_id,
+    operations_for_job,
     pipeline_takts,
 )
 
@@ -26,6 +29,19 @@ class PipelineCoordinationTests(unittest.TestCase):
                 {1: 3, 2: 2, 3: 1},
                 {2: 3, 3: 2},
                 {3: 3},
+            ],
+        )
+
+    def test_four_job_pipeline_inserts_one_order_and_drains_in_six_takts(self):
+        self.assertEqual(
+            pipeline_takts(4),
+            [
+                {1: 1},
+                {1: 2, 2: 1},
+                {1: 3, 2: 2, 3: 1},
+                {1: 4, 2: 3, 3: 2},
+                {2: 4, 3: 3},
+                {3: 4},
             ],
         )
 
@@ -162,6 +178,35 @@ class PipelineCoordinationTests(unittest.TestCase):
         )
         self.assertTrue(
             dependencies["R5:DMA_PICK"].issubset(after_plc_and_eds_pick)
+        )
+
+    def test_reduced_black_recipe_reuses_paths_and_bypasses_skipped_nodes(self):
+        job = PipelineJob(
+            2, object(), recipe="reduced", cabinet_color="black"  # type: ignore[arg-type]
+        )
+        enabled = {
+            operation_id(operation)
+            for module in MODULE_OPERATIONS
+            for operation in operations_for_job(job, module)
+        }
+        self.assertEqual(len(enabled), 24)
+        self.assertTrue(
+            {
+                "R4:SERVO_PICK", "R4:SERVO_PLACE",
+                "R5:DMA_PICK", "R5:DMA_PLACE",
+                "R8:FILTER_PICK", "R8:FILTER_PLACE",
+                "R7:SCREW_3", "R7:SCREW_4",
+            }.isdisjoint(enabled)
+        )
+        module_two = dependencies_for_job(job, 2)
+        self.assertEqual(module_two["R4:EDS_PICK"], {"R4:PSU_PLACE"})
+        self.assertEqual(
+            module_two["R5:PLC_PLACE"],
+            {"R4:PSU_PLACE", "R5:PLC_PICK"},
+        )
+        module_three = dependencies_for_job(job, 3)
+        self.assertEqual(
+            module_three["R7:SCREW_1"], {"R8:COM5_PLACE"}
         )
 
 

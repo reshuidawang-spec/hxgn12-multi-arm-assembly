@@ -2,7 +2,7 @@ schema_version: 2
 
 policy:
   motion_planning_contract: configs/motion_planning_policy.yaml
-  transport: three_job_indexing_pallet_pipeline
+  transport: flexible_order_indexing_pallet_pipeline
   whole_cabinet_robot_transfer: false
   wb1_interprocess_micro_index: {after: RAIL_PLACE_A, direction: +X, distance_m: 0.12}
   wb2_interprocess_micro_index: {after: DMA_PLACE, direction: +X, distance_m: 0.12}
@@ -13,11 +13,19 @@ policy:
   shared_workspace_entry: single_robot_exclusive
   parallelism: one_install_per_workspace_with_cross_workspace_concurrency
   pipeline_depth: 3
+  maximum_order_count: 4
   infeed_queue_spacing_m: 1.5
   transport_speed_follows_replay_multiplier: true
   output_transport: straight_positive_x_on_extended_process_conveyor
-  finished_queue_x_m: [2.55, 2.07, 1.59]
+  finished_queue_x_m: [2.55, 2.07, 1.59, 1.11]
   finished_bin_center_m: [3.32, 0.25]
+  mixed_recipe_demo:
+    sequence: [standard, black_reduced, standard, standard]
+    black_reduced_skips:
+      [SERVO_PICK, SERVO_PLACE, DMA_PICK, DMA_PLACE,
+       FILTER_PICK, FILTER_PLACE, SCREW_3, SCREW_4]
+    shared_tcp_and_finished_coordinates: true
+    wb2_micro_index_after: [EDS_PLACE, CONTACTOR_PICK_READY]
   intra_module_prefetch:
     public_workspace_1:
       - concurrent: [R1_WB1_PLACE, R2_RAIL_PICK_H]

@@ -40,6 +40,19 @@ DEFAULT_PIPELINE_PLAN = (
     REPO_ROOT / "data" / "fixed_paths" / "eight_arm_cabinet.partial.json"
 )
 INFEED_SPACING = 1.50
+BLACK_SHELL_COLOR = [0.025, 0.030, 0.035]
+REDUCED_RECIPE_SKIPS = frozenset(
+    {
+        "R4:SERVO_PICK",
+        "R4:SERVO_PLACE",
+        "R5:DMA_PICK",
+        "R5:DMA_PLACE",
+        "R8:FILTER_PICK",
+        "R8:FILTER_PLACE",
+        "R7:SCREW_3",
+        "R7:SCREW_4",
+    }
+)
 
 MODULE_PARTS = {
     1: ("shell", "rail_h", "rail_a", "rail_b"),
@@ -223,8 +236,49 @@ MODULE_DEPENDENCIES: dict[int, dict[str, frozenset[str]]] = {
 class PipelineJob:
     number: int
     runtime: AssemblyRuntime
+    recipe: str = "standard"
+    cabinet_color: str = "standard"
     completed_module: int = 0
     retired: bool = False
+
+
+def operations_for_job(
+    job: PipelineJob, module: int
+) -> tuple[PipelineOperation, ...]:
+    skipped = REDUCED_RECIPE_SKIPS if job.recipe == "reduced" else frozenset()
+    return tuple(
+        operation
+        for operation in MODULE_OPERATIONS[module]
+        if operation_id(operation) not in skipped
+    )
+
+
+def dependencies_for_job(
+    job: PipelineJob, module: int
+) -> dict[str, frozenset[str]]:
+    """Bypass skipped recipe nodes while preserving their prerequisites."""
+    enabled = {
+        operation_id(operation) for operation in operations_for_job(job, module)
+    }
+
+    def expand(key: str, trail: frozenset[str]) -> set[str]:
+        if key in enabled:
+            return {key}
+        if key in trail:
+            raise RuntimeError(f"cyclic recipe dependency at {key}")
+        result: set[str] = set()
+        for dependency in MODULE_DEPENDENCIES[module][key]:
+            result.update(expand(dependency, trail | {key}))
+        return result
+
+    return {
+        key: frozenset(
+            dependency
+            for source in MODULE_DEPENDENCIES[module][key]
+            for dependency in expand(source, frozenset({key}))
+        )
+        for key in enabled
+    }
 
 
 @dataclass
@@ -417,7 +471,14 @@ def advance_infeed_queue(jobs: list[PipelineJob], entering: PipelineJob) -> None
 
 def activate_module_parts(job: PipelineJob, module: int) -> None:
     runtime = job.runtime
+    enabled_keys = {
+        operation.key
+        for operation in operations_for_job(job, module)
+        if operation.key is not None
+    }
     for key in MODULE_PARTS[module]:
+        if key not in enabled_keys:
+            continue
         if module == 1 and key == "shell":
             # The shell has already arrived via the animated infeed queue.
             continue
@@ -579,8 +640,12 @@ def execute_takt(
     pending = {
         module: {
             operation_id(operation): operation
-            for operation in MODULE_OPERATIONS[module]
+            for operation in operations_for_job(assignments[module], module)
         }
+        for module in assignments
+    }
+    dependencies = {
+        module: dependencies_for_job(assignments[module], module)
         for module in assignments
     }
     completed = {module: set() for module in assignments}
@@ -605,8 +670,8 @@ def execute_takt(
                 }
                 for module in sorted(pending):
                     for key, operation in list(pending[module].items()):
-                        dependencies = MODULE_DEPENDENCIES[module][key]
-                        if not dependencies.issubset(completed[module]):
+                        prerequisites = dependencies[module][key]
+                        if not prerequisites.issubset(completed[module]):
                             continue
                         job = assignments[module]
                         if operation.kind == "index":
@@ -677,7 +742,7 @@ def execute_takt(
                     blocked = {
                         module: {
                             key: sorted(
-                                MODULE_DEPENDENCIES[module][key]
+                                dependencies[module][key]
                                 - completed[module]
                             )
                             for key in operations
@@ -745,6 +810,8 @@ def create_jobs(
     plan: dict,
     speed: float,
     count: int,
+    black_job: int = 0,
+    reduced_job: int = 0,
 ) -> list[PipelineJob]:
     sim = scene.sim
 
@@ -760,9 +827,20 @@ def create_jobs(
         assembly_alias="Pipeline_J1_Cabinet",
     )
     first.reset_product()
-    remove_prefixed_trees(sim, scene, ("Pipeline_J2_", "Pipeline_J3_"))
+    remove_prefixed_trees(
+        sim,
+        scene,
+        tuple(f"Pipeline_J{number}_" for number in range(2, 9)),
+    )
 
-    jobs = [PipelineJob(1, first)]
+    jobs = [
+        PipelineJob(
+            1,
+            first,
+            recipe="reduced" if reduced_job == 1 else "standard",
+            cabinet_color="black" if black_job == 1 else "standard",
+        )
+    ]
     original_pallet = first.pallet
     original_pallet_parent = int(sim.getObjectParent(original_pallet))
     for number in range(2, count + 1):
@@ -783,7 +861,34 @@ def create_jobs(
         )
         park_parts(runtime, number)
         park_pallet(runtime, number)
-        jobs.append(PipelineJob(number, runtime))
+        jobs.append(
+            PipelineJob(
+                number,
+                runtime,
+                recipe="reduced" if reduced_job == number else "standard",
+                cabinet_color="black" if black_job == number else "standard",
+            )
+        )
+    for job in jobs:
+        if job.cabinet_color != "black":
+            continue
+        shell = job.runtime.part_handles["shell"]
+        for shape in sim.getObjectsInTree(shell, sim.object_shape_type, 0):
+            alias = str(sim.getObjectAlias(int(shape), 0)).lower()
+            if (
+                "mounting_panel" not in alias
+                and int(shape) not in scene.proxied_visual_shapes
+            ):
+                sim.setShapeColor(
+                    int(shape),
+                    None,
+                    sim.colorcomponent_ambient_diffuse,
+                    BLACK_SHELL_COLOR,
+                )
+        print(
+            f"[recipe] J{job.number}: black shell, {job.recipe} process",
+            flush=True,
+        )
     stage_infeed_queue(jobs)
     return jobs
 
@@ -794,7 +899,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=23000)
     parser.add_argument("--scene", type=Path, default=SCENE_FILE)
     parser.add_argument("--plan", type=Path, default=DEFAULT_PIPELINE_PLAN)
-    parser.add_argument("--jobs", type=int, choices=(1, 2, 3), default=3)
+    parser.add_argument("--jobs", type=int, choices=(1, 2, 3, 4), default=3)
+    parser.add_argument(
+        "--black-job", type=int, choices=(0, 1, 2, 3, 4), default=0,
+        help="job number rendered with a black cabinet shell; 0 disables",
+    )
+    parser.add_argument(
+        "--reduced-job", type=int, choices=(0, 1, 2, 3, 4), default=0,
+        help="job number using the reduced process recipe; 0 disables",
+    )
     parser.add_argument("--speed", type=float, default=3.0)
     return parser.parse_args()
 
@@ -803,6 +916,12 @@ def main() -> int:
     args = parse_args()
     if not 0.2 <= args.speed <= 3.0:
         raise RuntimeError("--speed must be between 0.2 and 3.0")
+    for option, number in {
+        "--black-job": args.black_job,
+        "--reduced-job": args.reduced_job,
+    }.items():
+        if number > args.jobs:
+            raise RuntimeError(f"{option}={number} exceeds --jobs={args.jobs}")
     require_open_top_shell()
     scene_path = args.scene.expanduser().resolve()
     plan_path = args.plan.expanduser().resolve()
@@ -826,7 +945,14 @@ def main() -> int:
     if int(scene.sim.getSimulationState()) != int(scene.sim.simulation_stopped):
         raise RuntimeError("stop the CoppeliaSim simulation before pipeline replay")
 
-    jobs = create_jobs(scene, plan, args.speed, args.jobs)
+    jobs = create_jobs(
+        scene,
+        plan,
+        args.speed,
+        args.jobs,
+        black_job=args.black_job,
+        reduced_job=args.reduced_job,
+    )
     master = jobs[0].runtime
     scene.set_all_home()
     master.move_to_stows(simulate=False)

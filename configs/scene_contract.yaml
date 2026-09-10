@@ -1,19 +1,21 @@
 counts:
   arm_joints_per_robot: 6
   active_robots: 8
-  cell_objects: 255
+  cell_objects: 262
   display_only_robots: 0
   process_targets: 68
   robots: 8
   target_tree_dummies: 77
 embedded_scripts: []
 notes:
-- The west infeed is extended to a combined 6.0 m visual conveyor. Up to three open-top
+- The west infeed is extended to a combined 7.5 m visual conveyor. Up to four open-top
   empty cabinets queue at 1.5 m pitch and advance to the existing R1 shell-pick TCP;
   the spacing clears the measured R1 carried-shell sweep.
 - Pipeline replay uses one independent pallet, part set and assembly root per cabinet.
   Public workspaces 1, 2 and 3 may run concurrently, while each individual workspace
   remains single-robot exclusive.
+- Mixed-recipe replay can insert a black reduced-process cabinet as J2 among three
+  standard cabinets. It reuses the accepted TCP paths and common finished queue.
 - 'Scene produced by scripts/rename_scene_robots.py, scripts/build_new_line_scene.py
   and scripts/build_cabinet_product_scene.py: real control-cabinet STL product at
   50% scale, displayed as an OPEN-TOP box. The three obsolete 1.9 m round tables and
@@ -32,6 +34,6 @@ notes:
 scene:
   file: compact_cell.ttt
   root: /FiveCR5A_Cell
-  sha256: c77619191d0726af5fc41c72ff2b36d8f5a77084d7a1c83b9fcadcd88436b2ba
-  size: 8374852
+  sha256: 0f91cf0a6c00c04aba63c4027e75fb25504f81f131d1d578011a64a2c8d0e180
+  size: 8388069
 schema_version: 1

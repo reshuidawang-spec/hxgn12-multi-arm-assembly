@@ -5124,8 +5124,8 @@ class AssemblyRuntime:
     def conveyor_to_bin(self, cycle: int = 1) -> None:
         if self.assembly is None:
             raise RuntimeError("assembly root does not exist")
-        if cycle < 1 or cycle > 3:
-            raise ValueError("finished-product queue supports cycle 1..3")
+        if cycle < 1 or cycle > 4:
+            raise ValueError("finished-product queue supports cycle 1..4")
         # Fill from the far end toward the line.  A later cabinet therefore
         # stops before an earlier one instead of visually passing through it.
         destination_x = 2.55 - 0.48 * (cycle - 1)
