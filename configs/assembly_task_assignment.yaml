@@ -2,16 +2,22 @@ schema_version: 2
 
 policy:
   motion_planning_contract: configs/motion_planning_policy.yaml
-  transport: indexing_pallet_only
+  transport: three_job_indexing_pallet_pipeline
   whole_cabinet_robot_transfer: false
   wb1_interprocess_micro_index: {after: RAIL_PLACE_A, direction: +X, distance_m: 0.12}
   wb2_interprocess_micro_index: {after: DMA_PLACE, direction: +X, distance_m: 0.12}
   cabinet_pose: lying_open_up
   preassembled_parts: [mounting_panel]
   door_installation: false
-  execution_mode: sequential_validated_actions
+  execution_mode: event_driven_three_module_pipeline
   shared_workspace_entry: single_robot_exclusive
-  parallelism: source_pick_and_prefetch_outside_workspace_only
+  parallelism: one_install_per_workspace_with_cross_workspace_concurrency
+  pipeline_depth: 3
+  infeed_queue_spacing_m: 1.5
+  transport_speed_follows_replay_multiplier: true
+  output_transport: straight_positive_x_on_extended_process_conveyor
+  finished_queue_x_m: [2.55, 2.07, 1.59]
+  finished_bin_center_m: [3.32, 0.25]
   installation_order: large_and_deep_parts_before_small_and_near_parts
 
 workspaces:

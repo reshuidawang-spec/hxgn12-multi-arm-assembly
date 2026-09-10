@@ -4239,15 +4239,31 @@ class Track:
 
 
 class AssemblyRuntime:
-    def __init__(self, scene: Scene, plan: dict, speed: float):
+    def __init__(
+        self,
+        scene: Scene,
+        plan: dict,
+        speed: float,
+        *,
+        part_handles: dict[str, int] | None = None,
+        pallet: int | None = None,
+        assembly_alias: str = "Assembly_In_Process",
+    ):
         self.scene = scene
         self.sim = scene.sim
         self.plan = plan
         self.speed = speed
         self.assembly: int | None = None
-        self.part_handles = {key: scene.by_alias(value[0]) for key, value in PARTS.items()}
+        self.assembly_alias = assembly_alias
+        self.part_handles = (
+            {key: int(handle) for key, handle in part_handles.items()}
+            if part_handles is not None
+            else {key: scene.by_alias(value[0]) for key, value in PARTS.items()}
+        )
         self.ref_handles = {key: scene.by_alias(value[1]) for key, value in PARTS.items()}
-        self.pallet = scene.by_alias("Indexing_Pallet_1")
+        self.pallet = (
+            int(pallet) if pallet is not None else scene.by_alias("Indexing_Pallet_1")
+        )
         self.indexing_conveyor = scene.by_alias("Central_Indexing_Conveyor")
         self.pallet_z = float(self.sim.getObjectPosition(self.pallet, -1)[2])
         self.pallet_station = "wb1"
@@ -4258,10 +4274,21 @@ class AssemblyRuntime:
         self.events: set[str] = set()
 
     def reset_product(self) -> None:
-        try:
-            existing = self.scene.by_alias("Assembly_In_Process")
-        except RuntimeError:
-            existing = -1
+        existing = self.assembly if self.assembly is not None else -1
+        if existing < 0:
+            matches = [
+                int(handle)
+                for handle in self.sim.getObjectsInTree(
+                    self.scene.parts_parent, self.sim.handle_all, 0
+                )
+                if str(self.sim.getObjectAlias(int(handle), 0))
+                == self.assembly_alias
+            ]
+            if len(matches) > 1:
+                raise RuntimeError(
+                    f"expected at most one {self.assembly_alias}, found {len(matches)}"
+                )
+            existing = matches[0] if matches else -1
         for key, handle in self.part_handles.items():
             parent = int(self.sim.getObject(self.plan["initial_parts"][key]["parent"]))
             self.sim.setObjectParent(handle, parent, True)
@@ -4291,10 +4318,14 @@ class AssemblyRuntime:
         self.sim.setObjectPosition(left, tool, lp)
         self.sim.setObjectPosition(right, tool, rp)
 
+    def scaled_transport_steps(self, nominal: int, minimum: int = 8) -> int:
+        """Apply the replay speed multiplier to deterministic conveyor motion."""
+        return max(int(minimum), int(math.ceil(int(nominal) / float(self.speed))))
+
     def snap_part(self, key: str, station: str) -> None:
         if self.assembly is None:
             self.assembly = int(self.sim.createDummy(0.025))
-            self.sim.setObjectAlias(self.assembly, "Assembly_In_Process")
+            self.sim.setObjectAlias(self.assembly, self.assembly_alias)
             self.sim.setObjectParent(self.assembly, self.pallet, True)
             self.sim.setObjectPosition(self.assembly, -1, STATIONS[station])
             self.sim.setObjectQuaternion(self.assembly, -1, [0.0, 0.0, 0.0, 1.0])
@@ -4318,7 +4349,14 @@ class AssemblyRuntime:
         self.sim.setObjectParent(part, self.assembly, True)
         self.sim.setObjectMatrix(part, -1, matrix)
 
-    def index_pallet(self, station: str, *, wait_for: Iterable[str], emits: str) -> None:
+    def index_pallet(
+        self,
+        station: str,
+        *,
+        wait_for: Iterable[str],
+        emits: str,
+        interlock_robots: Iterable[str] = ROBOT_IDS,
+    ) -> None:
         """Move the located assembly to the next locked process station.
 
         This is deliberately a straight, deterministic conveyor motion.  It
@@ -4336,7 +4374,10 @@ class AssemblyRuntime:
             "wb1", "wb1_micro", "wb2", "wb2_micro", "staging", "output"
         }:
             raise ValueError(f"unknown indexing station: {station}")
-        for robot in ROBOT_IDS:
+        checked_robots = tuple(interlock_robots)
+        for robot in checked_robots:
+            if robot not in ROBOT_IDS:
+                raise ValueError(f"unknown conveyor interlock robot: {robot}")
             current = [
                 float(self.sim.getJointPosition(handle))
                 for handle in self.scene.joints[robot]
@@ -4382,11 +4423,12 @@ class AssemblyRuntime:
                 )
         print(
             f"[run] pallet index {self.pallet_station} -> {station}"
-            " | all-robot safe-stow interlock=OK",
+            f" | safe-stow interlock={','.join(checked_robots)} OK",
             flush=True,
         )
         try:
-            steps = max(80, int(math.dist(start[:2], end[:2]) / 0.012))
+            nominal_steps = max(80, int(math.dist(start[:2], end[:2]) / 0.012))
+            steps = self.scaled_transport_steps(nominal_steps, minimum=24)
             for index in range(1, steps + 1):
                 blend = quintic(index / steps)
                 position = [
@@ -4511,6 +4553,12 @@ class AssemblyRuntime:
             if precise_screw_contact
             else current_contact_exclusions
         )
+        # A pipeline job may use a cloned workpiece rather than the source
+        # handle that existed when the fixed path was planned.  The gripping
+        # tool is allowed to touch that exact runtime workpiece; carried-part
+        # versus environment safety is checked separately below.
+        if carried_part is not None:
+            runtime_exclusions.append(carried_part)
         return Track(
             robot=robot,
             frames=frames,
@@ -4595,10 +4643,18 @@ class AssemblyRuntime:
             (track.robot, track.stem, track.workspace)
             for track in tracks if track.workspace is not None
         ]
-        if len(workspace_entries) > 1:
+        workspace_owners: dict[str, list[tuple[str, str | None]]] = {}
+        for robot, stem, workspace in workspace_entries:
+            workspace_owners.setdefault(str(workspace), []).append((robot, stem))
+        conflicts = {
+            workspace: owners
+            for workspace, owners in workspace_owners.items()
+            if len(owners) > 1
+        }
+        if conflicts:
             raise RuntimeError(
                 "shared-workspace interlock: only one robot may enter a "
-                f"public workspace per stage, requested={workspace_entries}"
+                f"given public workspace per stage, conflicts={conflicts}"
             )
         callbacks = callbacks or {}
         fired: set[str] = set()
@@ -4914,6 +4970,8 @@ class AssemblyRuntime:
         return track, release
 
     def station_fixture_handles(self, station: str) -> list[int]:
+        if station in {"wb1", "wb1_micro", "wb2", "wb2_micro", "staging", "output"}:
+            return [self.indexing_conveyor, self.pallet]
         return [
             int(self.sim.getObject(path))
             for path in STATION_FIXTURE_PATHS[station]
@@ -4987,8 +5045,9 @@ class AssemblyRuntime:
         print(f"[run] {label}", flush=True)
         start = list(self.sim.getObjectPosition(self.assembly, -1))
         end = [x, y, start[2]]
-        for index in range(1, 61):
-            blend = quintic(index / 60.0)
+        steps = self.scaled_transport_steps(60)
+        for index in range(1, steps + 1):
+            blend = quintic(index / steps)
             self.sim.setObjectPosition(
                 self.assembly, -1,
                 [a + (b - a) * blend for a, b in zip(start, end)],
@@ -5003,8 +5062,9 @@ class AssemblyRuntime:
         print("[run] handoff conveyor slide west -> east", flush=True)
         start = list(self.sim.getObjectPosition(self.assembly, -1))
         end = [float(value) for value in R4_HANDOFF_CENTER]
-        for index in range(1, 61):
-            blend = quintic(index / 60.0)
+        steps = self.scaled_transport_steps(60)
+        for index in range(1, steps + 1):
+            blend = quintic(index / steps)
             self.sim.setObjectPosition(
                 self.assembly, -1,
                 [a + (b - a) * blend for a, b in zip(start, end)],
@@ -5068,15 +5128,19 @@ class AssemblyRuntime:
             raise ValueError("finished-product queue supports cycle 1..3")
         # Fill from the far end toward the line.  A later cabinet therefore
         # stops before an earlier one instead of visually passing through it.
-        destination_x = 2.05 - 0.37 * (cycle - 1)
+        destination_x = 2.55 - 0.48 * (cycle - 1)
         print(
             f"[run] cabinet {cycle} -> finished queue x={destination_x:.2f}",
             flush=True,
         )
         start = list(self.sim.getObjectPosition(self.assembly, -1))
-        end = [destination_x, -0.92, 0.20]
-        for index in range(1, 101):
-            blend = quintic(index / 100.0)
+        # Stay on the process conveyor: no diagonal floating and no sudden
+        # height change.  The three finished cabinets queue from the bin end
+        # back toward the last process station.
+        end = [destination_x, 0.25, start[2]]
+        steps = self.scaled_transport_steps(100, minimum=16)
+        for index in range(1, steps + 1):
+            blend = quintic(index / steps)
             self.sim.setObjectPosition(
                 self.assembly, -1,
                 [a + (b - a) * blend for a, b in zip(start, end)],

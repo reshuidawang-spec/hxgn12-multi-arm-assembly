@@ -9,17 +9,17 @@
 
 ## 1. 当前项目状态
 
-**当前版本：** 用户确认无柜门流程，已保存 `cabinet_open_up_v2` 开口朝上场景，30动作/68规划点、schema36。内安装板作为柜壳预装件；R8改装滤波器，R7在全部安装完成后锁紧。真实开口检查通过，逐臂路径重建与验收仍在进行；旧34/35路径不得直接播放。下方旧柜门、33动作及旧回放描述仅为历史记录。
+**当前版本：** 无柜门、开口朝上、无圆台的八机械臂场景，30动作/68规划点、schema36。三柜三级流水线已完成真实回放：空柜从6米西侧上料带按1.5米安全节距排队，公共区1/2/3可同时执行不同柜体任务，同一公共区仍保持单臂互斥；`--speed` 同时作用于机械臂回放和各段传送带。
 
 2026-09-08 审计纠正：旧版将形状包围盒坐标系误当作网格坐标系，导致真实柜壳/门板朝向与代理不一致。旧版 33/33 通过记录不能用于整线验收。目前已改为背面朝托盘、柜门开口朝上，正在按真实几何逐臂重规划；尚未完成整线验收。
 
 | 部分 | 当前内容 | 状态 |
 |---|---|---|
-| 8 臂 CoppeliaSim 场景 | `scenes/compact_cell.ttt`：8 台 CR5A、中央索引输送线、三个公共区、68 个规划点 | 真正开口朝上，无旧圆盘、无装门流程；逐臂验证中 |
+| 8 臂 CoppeliaSim 场景 | `scenes/compact_cell.ttt`：8 台 CR5A、远端排队上料带、加长中央索引输送线、末端成品料框、三个公共区、68 个规划点 | 开口朝上，无旧圆盘、右上展示柜或右下废弃输送带；三柜流水线回放通过 |
 | 工艺自动拆解 | `test/decompose_assembly.py`：STL 解析 → 接触图 → 装配顺序 DAG → 工艺分类 → 8 臂能力映射（输入一个装配好的柜体模型，输出工艺链 JSON） | MVP 已可用（含 tkinter 界面 `test/import_cabinet_ui.py`） |
 | 运动规划与执行 | `configs/motion_planning_policy.yaml` + `scripts/run_8arm_cabinet_assembly.py`：竖直 Π 形模板 → 分级回退 → 机间碰撞预检 → 确定性步进回放 | 按真实柜壳检查碰撞、实际抓取接触及释放误差；重验证中 |
 | 固定路径数据 | `data/fixed_paths/eight_arm_cabinet.json`（历史正式计划）与 `.partial.json`（新检查点） | 当前规划器要求 schema 36；旧 schema 34/35 不可直接执行 |
-| 调度与编排 | `scheduler/`（订单解析、动态订单窗口、前后段重叠流水）+ `orchestration/cell_orchestrator.py` | 沿自五臂阶段，适配 8 臂中 |
+| 调度与编排 | `scripts/run_8arm_pipeline_assembly.py`：三柜独立托盘/零件/事件上下文，模块完成事件立即续接，三级填充与排空 | 已消除跨模块齐步等待，并完成三柜成品直线队列回放 |
 
 机械臂分工（当前权威分工见 `configs/assembly_task_assignment.yaml` 与场景目标点）：
 
@@ -94,6 +94,13 @@ python3 scripts/run_8arm_cabinet_assembly.py \
 # 规划 + 执行（确定性步进回放）
 python3 scripts/run_8arm_cabinet_assembly.py --rebuild-plan
 # 常用参数：--host/--port（默认 127.0.0.1:23000）、--speed 0.2..3.0、--skip-preflight
+
+# 推荐演示：三个空柜排队上料、三个公共区流水并行、三个成品依次输出
+python3 -u scripts/run_8arm_pipeline_assembly.py \
+  --port 23000 \
+  --plan data/fixed_paths/eight_arm_cabinet.partial.json \
+  --jobs 3 \
+  --speed 3.0
 ```
 
 新柜体工艺拆解：

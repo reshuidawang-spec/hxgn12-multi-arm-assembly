@@ -1,22 +1,28 @@
 counts:
   arm_joints_per_robot: 6
   active_robots: 8
-  cell_objects: 330
+  cell_objects: 255
   display_only_robots: 0
   process_targets: 68
   robots: 8
   target_tree_dummies: 77
 embedded_scripts: []
 notes:
+- The west infeed is extended to a combined 6.0 m visual conveyor. Up to three open-top
+  empty cabinets queue at 1.5 m pitch and advance to the existing R1 shell-pick TCP;
+  the spacing clears the measured R1 carried-shell sweep.
+- Pipeline replay uses one independent pallet, part set and assembly root per cabinet.
+  Public workspaces 1, 2 and 3 may run concurrently, while each individual workspace
+  remains single-robot exclusive.
 - 'Scene produced by scripts/rename_scene_robots.py, scripts/build_new_line_scene.py
   and scripts/build_cabinet_product_scene.py: real control-cabinet STL product at
   50% scale, displayed as an OPEN-TOP box. The three obsolete 1.9 m round tables and
   detached R1_Base..R8_Base discs are removed and replaced by eight square, floor-to-base-link
   pedestals. Three shared workspaces are marked along the unobstructed indexing conveyor:
-  R1/R2/R3, R4/R5/R6, and R6/R7/R8. The reference cabinet is on a compact display
-  riser outside those workspaces. Task-owned R4/R5/R6/R8 device baskets are present;
-  all task actions have paired vertical APP/TCP targets, and all eight robot roots
-  are clear of the conveyor.'
+  R1/R2/R3, R4/R5/R6, and R6/R7/R8. The upper-right reference display and obsolete
+  lower-right conveyor are removed; exact assembly references remain hidden dummies.
+  Task-owned R4/R5/R6/R8 device baskets are present; all task actions have paired
+  vertical APP/TCP targets, and all eight robot roots are clear of the conveyor.'
 - After R3 installs vertical rail A at WB1, the pallet and assembly advance 0.12 m
   along world +X to wb1_micro before rail B; the R3-B APP/TCP pair includes the same
   offset.
@@ -26,6 +32,6 @@ notes:
 scene:
   file: compact_cell.ttt
   root: /FiveCR5A_Cell
-  sha256: 4d3c3a3fe31a3bb6e745e69b24dfcd2978a3f4dab8349c926a945c7b81645a4b
-  size: 8513268
+  sha256: c77619191d0726af5fc41c72ff2b36d8f5a77084d7a1c83b9fcadcd88436b2ba
+  size: 8374852
 schema_version: 1

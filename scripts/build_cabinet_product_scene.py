@@ -584,10 +584,12 @@ def remove_legacy_robot_base_discs(sim) -> int:
 
 
 def rebuild_areas(sim, areas_parent: int) -> None:
-    """Create three logical shared workspaces and the reference display.
+    """Create three logical shared workspaces.
 
     The former WB1/WB2/handoff/staging stands blocked a straight cabinet
     flow.  Their support function is now provided by the indexing pallet.
+    Reference geometry is kept as hidden dummies, so no display cabinet or
+    riser is needed in the upper-right corner.
     """
     for alias, center, _size, members, _color in PUBLIC_WORKSPACES:
         workspace = _group(sim, alias, areas_parent, (*center, 0.0))
@@ -595,18 +597,6 @@ def rebuild_areas(sim, areas_parent: int) -> None:
         for robot in members:
             member = _group(sim, f"{alias}_Member_{robot}", workspace)
             sim.setObjectInt32Param(member, sim.objintparam_visibility_layer, 0)
-
-    riser_height = SURFACE_Z - BASE_TABLE_SURFACE_Z
-    riser_z = BASE_TABLE_SURFACE_Z + riser_height / 2.0
-    _cuboid(
-        sim,
-        (0.42, 0.32, riser_height),
-        (*REF_CENTER, riser_z),
-        "Display_Elevated_Fixture",
-        areas_parent,
-        COLOR_METAL,
-    )
-
 
 def build_indexing_conveyor(sim, conveyors_parent: int) -> int:
     """Create a four-stop conveyor and one cabinet locating pallet.
@@ -696,6 +686,9 @@ R4_HANDOFF_CENTER = (-2.05, 0.45)
 STAGING_CENTER = (0.05, 0.25)          # S78 staging table
 REF_CENTER = (1.65, 1.25)              # compact reference display outside public workspaces
 CONVEYOR_CENTER = (-3.55, 1.35)
+INFEED_CONVEYOR_CENTER = (-5.55, 1.35)
+INFEED_CONVEYOR_LENGTH = 6.00
+INFEED_CONVEYOR_WIDTH = 0.34
 SHELL_POSITIONS = [(-3.65, 1.25)]
 PLATE_STAND_CENTER = (-3.90, -0.62)
 RAIL_RACK_CENTER = (-2.45, -0.50)
@@ -749,9 +742,12 @@ INDEX_STATIONS = (
     ("FASTEN", STAGING_CENTER),
     ("OUTPUT", (0.75, 0.25)),
 )
-INDEX_CONVEYOR_CENTER = (-1.20, 0.25)
-INDEX_CONVEYOR_LENGTH = 4.50
+INDEX_CONVEYOR_CENTER = (-0.25, 0.25)
+INDEX_CONVEYOR_LENGTH = 6.40
 INDEX_CONVEYOR_WIDTH = 0.46
+FINISHED_BIN_CENTER = (3.32, 0.25)
+OUTPUT_EXTENSION_CENTER = (2.00, 0.25)
+OUTPUT_EXTENSION_LENGTH = 1.90
 
 HOME_REF_POSITIONS = {
     "R1": (-3.65, 1.3625, 0.482),
@@ -1012,12 +1008,16 @@ def remove_placeholder_products(sim) -> dict:
     transient_helpers = [
         int(handle)
         for handle in _tree(sim, int(sim.handle_scene))
-        if str(sim.getObjectAlias(handle, 0))
-        in {
-            "Motion_Collision_Planner",
-            "Assembly_Collision_Planner",
-            "Assembly_Runtime_Batch",
-        }
+        if (
+            str(sim.getObjectAlias(handle, 0))
+            in {
+                "Motion_Collision_Planner",
+                "Assembly_Collision_Planner",
+                "Assembly_Runtime_Batch",
+            }
+            or "_assembly_virt_tip" in str(sim.getObjectAlias(handle, 0))
+            or "_assembly_down_tip" in str(sim.getObjectAlias(handle, 0))
+        )
     ]
     if transient_helpers:
         sim.removeObjects(transient_helpers)
@@ -1105,6 +1105,96 @@ def make_finished_bin(sim, parent: int, center: tuple) -> int:
         size = (wall_t, outer[1], wall_h) if "E" in alias else (outer[0], wall_t, wall_h)
         _cuboid(sim, size, (wx, wy, floor_z + wall_h / 2), alias, root, [0.62, 0.55, 0.38])
     return root
+
+
+def update_finished_output(sim, output: Path) -> dict:
+    """Extend the saved legacy process belt and add its receiving bin.
+
+    This lightweight migration avoids reimporting all CAD meshes.  A fresh
+    full build creates the equivalent single 6.4 m central conveyor.
+    """
+    if int(sim.getSimulationState()) != int(sim.simulation_stopped):
+        raise RuntimeError("stop the simulation before updating output")
+    conveyors_parent = int(sim.getObject(CONVEYORS_PATH))
+    stale_aliases = {
+        "Finished_Conveyor",
+        "Process_Conveyor_Extension",
+        "Finished_Bin",
+    }
+    stale = {
+        int(handle)
+        for handle in _tree(sim, conveyors_parent)
+        if any(
+            str(sim.getObjectAlias(handle, 0)).startswith(alias)
+            for alias in stale_aliases
+        )
+    }
+    stale_roots = [
+        handle for handle in stale
+        if int(sim.getObjectParent(handle)) not in stale
+    ]
+    for root in stale_roots:
+        sim.removeObjects(list(_tree(sim, root)))
+
+    # Remove the obsolete upper-right display while preserving the hidden
+    # REF_* dummies used to calculate exact final assembly transforms.
+    display = [
+        int(handle)
+        for handle in _tree(sim, int(sim.handle_scene))
+        if str(sim.getObjectAlias(handle, 0)) == "Display_Elevated_Fixture"
+    ]
+    if display:
+        sim.removeObjects(display)
+    reference_root = _get(sim, f"{PARTS_PATH}/Cabinet_Product_REF")
+    reference_shapes = (
+        [
+            int(handle)
+            for handle in sim.getObjectsInTree(
+                reference_root, sim.object_shape_type, 0
+            )
+        ]
+        if reference_root != -1
+        else []
+    )
+    if reference_shapes:
+        sim.removeObjects(reference_shapes)
+
+    extension = make_conveyor(
+        sim,
+        conveyors_parent,
+        prefix="Process_Conveyor_Extension",
+        center=OUTPUT_EXTENSION_CENTER,
+        length=OUTPUT_EXTENSION_LENGTH,
+        width=INDEX_CONVEYOR_WIDTH,
+        belt_z=INDEX_BELT_TOP_Z - 0.090,
+    )
+    finished_bin = make_finished_bin(sim, conveyors_parent, FINISHED_BIN_CENTER)
+
+    helper_aliases = {
+        "Motion_Collision_Planner",
+        "Assembly_Collision_Planner",
+        "Assembly_Runtime_Batch",
+    }
+    helpers = [
+        int(handle)
+        for handle in _tree(sim, int(sim.handle_scene))
+        if (
+            str(sim.getObjectAlias(handle, 0)) in helper_aliases
+            or "_assembly_virt_tip" in str(sim.getObjectAlias(handle, 0))
+            or "_assembly_down_tip" in str(sim.getObjectAlias(handle, 0))
+        )
+    ]
+    if helpers:
+        sim.removeObjects(helpers)
+    sim.saveScene(str(output))
+    sync_scene_contract(sim, output)
+    return {
+        "extension": extension,
+        "finished_bin": finished_bin,
+        "display_objects_removed": len(display) + len(reference_shapes),
+        "runtime_helpers_removed": len(helpers),
+        "saved_scene": str(output),
+    }
 
 
 def make_stand(sim, parent: int, alias: str, center: tuple, size: tuple) -> int:
@@ -1225,21 +1315,29 @@ def build_product_scene(sim, output: Path) -> dict:
     conveyors_parent = _ensure_group(sim, CONVEYORS_PATH, "Conveyors")
     targets_parent = _ensure_group(sim, TARGETS_PATH, "Targets")
 
-    source_conveyor = int(
-        sim.getObject(f"{CONVEYORS_PATH}/Cabinet_Conveyor")
+    source_conveyor = int(sim.getObject(f"{CONVEYORS_PATH}/Cabinet_Conveyor"))
+    source_conveyor_position = list(sim.getObjectPosition(source_conveyor, -1))
+    sim.removeObjects(list(_tree(sim, source_conveyor)))
+    source_conveyor = make_conveyor(
+        sim,
+        conveyors_parent,
+        prefix="Cabinet_Conveyor",
+        center=INFEED_CONVEYOR_CENTER,
+        length=INFEED_CONVEYOR_LENGTH,
+        width=INFEED_CONVEYOR_WIDTH,
+        belt_z=source_conveyor_position[2],
     )
-    source_conveyor_position = list(
-        sim.getObjectPosition(source_conveyor, -1)
-    )
-    sim.setObjectPosition(
-        source_conveyor,
-        -1,
-        [CONVEYOR_CENTER[0], CONVEYOR_CENTER[1], source_conveyor_position[2]],
-    )
+    report["infeed_conveyor"] = {
+        "handle": source_conveyor,
+        "center": list(INFEED_CONVEYOR_CENTER),
+        "length": INFEED_CONVEYOR_LENGTH,
+    }
     old_output = [
         int(handle)
         for handle in _tree(sim, conveyors_parent)
-        if str(sim.getObjectAlias(handle, 0)) == "Finished_Conveyor"
+        if str(sim.getObjectAlias(handle, 0)).startswith(
+            ("Finished_Conveyor", "Process_Conveyor_Extension", "Finished_Bin")
+        )
     ]
     if old_output:
         old_output_trees = list(dict.fromkeys(
@@ -1267,6 +1365,9 @@ def build_product_scene(sim, output: Path) -> dict:
     rebuild_areas(sim, areas_parent)
     report["indexing_pallet"] = build_indexing_conveyor(
         sim, conveyors_parent
+    )
+    report["finished_bin"] = make_finished_bin(
+        sim, conveyors_parent, FINISHED_BIN_CENTER
     )
 
     # ---- source stations -------------------------------------------------
@@ -1717,6 +1818,10 @@ def parse_args() -> argparse.Namespace:
         '--tools-only', action='store_true',
         help='Update slim device tools and save without rebuilding products',
     )
+    parser.add_argument(
+        '--output-only', action='store_true',
+        help='Extend the existing process conveyor and add the finished bin',
+    )
     return parser.parse_args()
 
 
@@ -1724,6 +1829,11 @@ def main() -> int:
     args = parse_args()
     client = RemoteAPIClient(args.host, args.port)
     sim = client.require("sim")
+    if args.output_only:
+        report = update_finished_output(sim, args.output)
+        for key, value in report.items():
+            print(f'{key}: {value}')
+        return 0
     if args.tools_only:
         if sim.getSimulationState() != sim.simulation_stopped:
             raise RuntimeError('stop simulation before updating tools')
