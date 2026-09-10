@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -298,6 +299,7 @@ class ActiveMotion:
     all_pairs: list[tuple[int, int]]
     cursor: int = 0
     callback_fired: bool = False
+    start_ts: float = 0.0
 
     @property
     def frame_index(self) -> int:
@@ -629,6 +631,17 @@ def retire_job(job: PipelineJob) -> None:
     runtime.sim.setObjectParent(runtime.assembly, runtime.scene.parts_parent, True)
     park_pallet(runtime, job.number)
     job.retired = True
+    print(
+        "[report-job] " + json.dumps(
+            {
+                "job": job.number,
+                "recipe": job.recipe,
+                "cabinet_color": job.cabinet_color,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     print(f"[pipeline] J{job.number} finished and queued", flush=True)
 
 
@@ -688,6 +701,20 @@ def execute_takt(
                                 f"{operation.label}",
                                 flush=True,
                             )
+                            print(
+                                "[report] " + json.dumps(
+                                    {
+                                        "module": module,
+                                        "job": job.number,
+                                        "robot": None,
+                                        "key": key,
+                                        "label": operation.label,
+                                        "seconds": 0.0,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
                             job.runtime.index_pallet(
                                 operation.station,
                                 wait_for=(),
@@ -720,6 +747,7 @@ def execute_takt(
                         motion = start_motion(
                             master, module, job, operation
                         )
+                        motion.start_ts = time.monotonic()
                         active[(module, key)] = motion
                         del pending[module][key]
                         active_robots.add(motion.track.robot)
@@ -795,6 +823,21 @@ def execute_takt(
                 module, key = active_key
                 finish_motion(master, motion)
                 completed[module].add(key)
+                duration = max(0.0, time.monotonic() - motion.start_ts)
+                print(
+                    "[report] " + json.dumps(
+                        {
+                            "module": module,
+                            "job": motion.job.number,
+                            "robot": motion.track.robot,
+                            "key": key,
+                            "label": motion.operation.label,
+                            "seconds": round(duration, 3),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
                 print(
                     f"[pipeline ready] M{module}/J{motion.job.number}: "
                     f"{motion.operation.label} complete; dependencies released",
@@ -932,7 +975,11 @@ def main() -> int:
         raise RuntimeError("pipeline plan motion-policy fingerprint is stale")
     expected_scene = {key: plan["scene"][key] for key in ("size", "sha256")}
     if expected_scene != fingerprint(scene_path):
-        raise RuntimeError("pipeline plan is bound to a different scene")
+        raise RuntimeError(
+            "pipeline plan is bound to a different scene; if only visual or "
+            "persistence changes were made, run scripts/sync_scene_fingerprints.py; "
+            "otherwise re-plan and audit the changed geometry"
+        )
 
     client = RemoteAPIClient(args.host, args.port)
     client.timeout = 900.0
@@ -952,6 +999,25 @@ def main() -> int:
         args.jobs,
         black_job=args.black_job,
         reduced_job=args.reduced_job,
+    )
+    module_plan: dict[str, int] = {}
+    arm_plan: dict[str, int] = {}
+    for job in jobs:
+        for module in (1, 2, 3):
+            for operation in operations_for_job(job, module):
+                module_plan[str(module)] = module_plan.get(str(module), 0) + 1
+                if operation.robot:
+                    arm_plan[operation.robot] = arm_plan.get(operation.robot, 0) + 1
+    print(
+        "[report-plan] " + json.dumps(
+            {
+                "jobs": args.jobs,
+                "modules": module_plan,
+                "arms": arm_plan,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
     )
     master = jobs[0].runtime
     scene.set_all_home()

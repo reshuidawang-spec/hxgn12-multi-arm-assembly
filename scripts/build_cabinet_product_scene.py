@@ -27,6 +27,7 @@ import itertools
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1024,6 +1025,33 @@ def remove_placeholder_products(sim) -> dict:
     if transient_helpers:
         sim.removeObjects(transient_helpers)
     removed["transient_runtime_helpers"] = len(transient_helpers)
+    # Multi-cabinet replay clones J2+ parts and indexing pallets at runtime.
+    # An operator can accidentally save those clones into the scene after a
+    # demo; remove complete prefixed trees so the committed scene always opens
+    # in its single-product baseline state.
+    pipeline_clones = {
+        int(handle)
+        for handle in _tree(sim, int(sim.handle_scene))
+        if re.match(
+            r"^Pipeline_J[2-8]_",
+            str(sim.getObjectAlias(handle, 0)),
+        )
+    }
+    pipeline_roots = [
+        handle
+        for handle in pipeline_clones
+        if int(sim.getObjectParent(handle)) not in pipeline_clones
+    ]
+    pipeline_objects = list(
+        dict.fromkeys(
+            int(descendant)
+            for root in pipeline_roots
+            for descendant in _tree(sim, root)
+        )
+    )
+    if pipeline_objects:
+        sim.removeObjects(pipeline_objects)
+    removed["pipeline_runtime_clones"] = len(pipeline_objects)
     # An interrupted preflight can leave picked parts parented below a robot
     # tool, outside /FiveCR5A_Cell/Parts.  Remove those stale process
     # instances before importing the fresh set, otherwise aliases and TCP
@@ -1492,6 +1520,9 @@ def build_product_scene(sim, output: Path) -> dict:
     report["targets_created"] = create_targets(
         sim, targets_parent, paired_targets
     )
+    report["teaching_targets_hidden"] = hide_teaching_targets(
+        sim, targets_parent
+    )
 
     sim.saveScene(str(output))
     sync_points_config(paired_targets)
@@ -1733,6 +1764,18 @@ def create_targets(sim, targets_parent: int, paired_targets: dict) -> int:
     return count
 
 
+def hide_teaching_targets(sim, targets_parent: int) -> int:
+    """隐藏 Targets 树的示教标记,但保留对象、位姿和程序路径。"""
+    handles = [int(handle) for handle in _tree(sim, targets_parent)]
+    for handle in handles:
+        sim.setObjectInt32Param(
+            handle,
+            sim.objintparam_visibility_layer,
+            0,
+        )
+    return len(handles)
+
+
 def _target_area(name: str) -> str:
     if name.startswith("R1_SHELL_PICK"):
         return "cabinet_conveyor_area"
@@ -1813,6 +1856,10 @@ def sync_points_config(paired_targets: dict) -> None:
 
 def sync_scene_contract(sim, output: Path) -> None:
     """Refresh fingerprint and generated object counts after saving."""
+    # CoppeliaSim may return from saveScene just before the file replacement is
+    # visible to another process.  Let the saved bytes settle before binding
+    # the contract fingerprint; otherwise the controller sees a stale hash.
+    time.sleep(1.0)
     path = REPO_ROOT / "configs" / "scene_contract.yaml"
     contract = yaml.safe_load(path.read_text(encoding="utf-8"))
     root = int(sim.getObject(SCENE_ROOT))
@@ -1841,6 +1888,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument('--targets-only', action='store_true', help='Regenerate APP/TCPs without reimporting the product meshes')
     parser.add_argument(
+        '--hide-targets-only',
+        action='store_true',
+        help='Hide teaching target markers without deleting or moving them',
+    )
+    parser.add_argument(
         '--tools-only', action='store_true',
         help='Update slim device tools and save without rebuilding products',
     )
@@ -1855,6 +1907,16 @@ def main() -> int:
     args = parse_args()
     client = RemoteAPIClient(args.host, args.port)
     sim = client.require("sim")
+    if args.hide_targets_only:
+        if sim.getSimulationState() != sim.simulation_stopped:
+            raise RuntimeError('stop simulation before hiding teaching targets')
+        targets = int(sim.getObject(TARGETS_PATH))
+        hidden = hide_teaching_targets(sim, targets)
+        sim.saveScene(str(args.output))
+        sync_scene_contract(sim, args.output)
+        print(f'teaching_targets_hidden: {hidden}')
+        print(f'saved_scene: {args.output}')
+        return 0
     if args.output_only:
         report = update_finished_output(sim, args.output)
         for key, value in report.items():
@@ -1880,11 +1942,13 @@ def main() -> int:
             raise RuntimeError('stop simulation before updating targets')
         _remove_children(sim, TARGETS_PATH)
         paired = build_paired_targets(_load_manifest())
-        create_targets(sim, int(sim.getObject(TARGETS_PATH)), paired)
+        targets = int(sim.getObject(TARGETS_PATH))
+        create_targets(sim, targets, paired)
+        hidden = hide_teaching_targets(sim, targets)
         sim.saveScene(str(args.output))
         sync_points_config(paired)
         sync_scene_contract(sim, args.output)
-        print('updated task targets and scene contract')
+        print(f'updated task targets and scene contract; hidden: {hidden}')
         return 0
     report = build_product_scene(sim, args.output)
     for key, value in report.items():

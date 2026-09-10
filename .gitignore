@@ -26,6 +26,7 @@ dist/
 change/
 scenes/compact_cell1ttt.ttt
 scenes/*.ttt.bak
+data/fixed_paths/*.before_*
 
 # Large binary data (experimental results)
 src/*/data/20*/

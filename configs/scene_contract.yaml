@@ -1,7 +1,7 @@
 counts:
   arm_joints_per_robot: 6
   active_robots: 8
-  cell_objects: 262
+  cell_objects: 243
   display_only_robots: 0
   process_targets: 68
   robots: 8
@@ -34,6 +34,6 @@ notes:
 scene:
   file: compact_cell.ttt
   root: /FiveCR5A_Cell
-  sha256: 0f91cf0a6c00c04aba63c4027e75fb25504f81f131d1d578011a64a2c8d0e180
-  size: 8388069
+  sha256: c0d66f22c3006baf548159345b1be767fbe4e948d2c8d5c5da01c98c0e5def8b
+  size: 8605378
 schema_version: 1

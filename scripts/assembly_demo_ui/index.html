@@ -142,6 +142,18 @@ tbody tr:last-child td{border-bottom:none}
 .arm .meta{font-size:11.5px;color:var(--muted);line-height:1.7}
 .arm .parts{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
 .arm .parts span{font-size:10.5px;background:#0d1a2f;border:1px solid var(--line);border-radius:999px;padding:2px 7px}
+/* model selection + run bar */
+.model-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.model-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;transition:.15s}
+.model-card:hover{border-color:var(--accent2)}
+.model-card.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;background:#0c2038}
+.mc-name{font-size:15px;font-weight:700}
+.mc-id{margin-top:2px}
+.mc-meta{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6}
+.runbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.run-qty{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.run-qty input{width:64px;background:#0d1a2f;border:1px solid var(--accent2);color:var(--text);border-radius:8px;padding:8px 10px;font-size:15px;font-weight:700;text-align:center}
+.qty-note{font-size:11.5px;color:var(--muted)}
 /* console */
 .console{
   background:#070d18;border:1px solid var(--line);border-radius:12px;
@@ -162,6 +174,20 @@ tbody tr:last-child td{border-bottom:none}
 .dot.running{background:var(--accent);animation:blink 1s infinite}
 .dot.error{background:var(--err)}
 @keyframes blink{50%{opacity:.25}}
+/* completion report */
+.report-kpis{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:12px}
+.report-kpi{background:linear-gradient(145deg,#16253b,#111c2f);border:1px solid var(--line);border-radius:13px;padding:16px}
+.report-kpi .k{font-size:12px;color:var(--muted)}
+.report-kpi .v{font-size:27px;font-weight:800;color:var(--ok);margin-top:5px}
+.report-kpi .u{font-size:12px;color:var(--muted);font-weight:500;margin-left:4px}
+.module-report{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:12px}
+.module-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.module-head,.arm-progress-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.module-name{font-size:13px;font-weight:700}.module-pct{color:var(--ok);font-size:18px;font-weight:800}
+.metric-bar{height:8px;background:#0b1423;border-radius:999px;overflow:hidden;margin-top:10px}
+.metric-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--ok));border-radius:999px;transition:width .5s}
+.report-table td{vertical-align:middle}.report-table .metric-bar{min-width:120px;margin:0}
+.report-wait{padding:36px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
 .btnrow{display:flex;gap:10px;flex-wrap:wrap}
 button.primary{
   background:linear-gradient(135deg,var(--accent),#6366f1);color:#06121f;
@@ -183,7 +209,7 @@ button.ghost:hover{border-color:var(--accent2)}
   padding:10px 16px;font-size:13px;max-width:420px;animation:pop .25s;
 }
 footer{padding:10px 24px;font-size:11.5px;color:#4a5f80;border-top:1px solid var(--line);text-align:center}
-@media (max-width:1000px){main{grid-template-columns:1fr}}
+@media (max-width:1000px){main{grid-template-columns:1fr}.report-kpis,.module-report{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -229,11 +255,11 @@ function toast(msg){
 }
 
 const STEPS = [
-  {key:"import",   num:1, title:"导入电控柜模型",   sub:"加载柜体与 13 类元器件的三角网格模型,生成整柜预览", btn:"导入电控柜模型",   run:stepImport},
+  {key:"import",   num:1, title:"选择柜型并导入模型", sub:"自由选择要导入的电控柜型号,生成整柜预览",       btn:"选择柜型",         run:stepImport},
   {key:"disasm",   num:2, title:"拆解工艺",         sub:"按装配依赖逆序生成拆解工序,逐件拆除",           btn:"拆解工艺",         run:stepDisasm},
   {key:"assign",   num:3, title:"分配任务",         sub:"将装配工序按工位分配到 8 台 CR5A 机械臂",       btn:"分配任务",         run:stepAssign},
-  {key:"launch",   num:4, title:"运行装配任务",     sub:"唤起 CoppeliaSim 并加载八臂装配场景",           btn:"运行装配任务",     run:stepLaunch},
-  {key:"start",    num:5, title:"开始装配",         sub:"启动装配控制器,开始整线装配运行",               btn:"开始",             run:stepStart},
+  {key:"launch",   num:4, title:"运行装配任务",     sub:"一键启动仿真并执行四柜混线装配",                 btn:"运行装配任务",     run:stepLaunch},
+  {key:"report",   num:5, title:"生产完工统计",     sub:"查看工艺完工率、机械臂用时与完工数量",     btn:"查看完工统计",     run:stepReport},
 ];
 const done = new Set();
 let cache = {};
@@ -242,6 +268,9 @@ function renderWizard(){
   const el = $("#wizard"); el.innerHTML = "";
   STEPS.forEach((s, i) => {
     const unlocked = i === 0 || done.has(STEPS[i-1].key);
+    const canRun = unlocked && (
+      !done.has(s.key) || s.key === "launch" || s.key === "report"
+    );
     const card = document.createElement("div");
     card.className = "step" + (done.has(s.key) ? " done" : "") + (!unlocked ? " locked" : "");
     card.innerHTML = `
@@ -249,8 +278,8 @@ function renderWizard(){
         <div class="num">${s.num}</div>
         <div><h3>${s.title}</h3><p>${s.sub}</p></div>
       </div>
-      <span class="state">${done.has(s.key) ? "✓ 已完成" : (unlocked ? "可执行" : "等待上一步")}</span>`;
-    if (unlocked && !done.has(s.key)) {
+      <span class="state">${done.has(s.key) ? (s.key === "launch" ? "✓ 已完成(可再次运行)" : s.key === "report" ? "✓ 报告已生成(可查看)" : "✓ 已完成") : (unlocked ? "可执行" : "等待上一步")}</span>`;
+    if (canRun) {
       card.addEventListener("click", () => s.run(card));
     }
     el.appendChild(card);
@@ -262,16 +291,49 @@ function markDone(key){
   updateChips();
 }
 
-/* ================= step 1: 导入模型 ================= */
+/* ================= step 1: 选择柜型并导入模型 ================= */
 async function stepImport(card){
   card.classList.add("active");
-  $("#panel").innerHTML = `<h2>正在导入电控柜模型<span class="tag">加载中</span></h2><div class="hint">读取 models/cabinet/processed 并渲染整柜网格预览 …</div>`;
+  $("#panel").innerHTML = `<h2>选择柜型<span class="tag">加载中</span></h2><div class="hint">正在扫描可用柜型号 …</div>`;
   try{
-    const data = await api("/api/import_model", {method:"POST"});
+    const list = await api("/api/models");
+    if (!list.models.length) throw new Error("未找到任何柜型号(需要 models/&lt;型号&gt;/processed/manifest.json)");
+    $("#panel").innerHTML = `
+      <h2>选择柜型<span class="tag">${list.models.length} 个可选型号</span></h2>
+      <div class="hint">请选择要导入的电控柜型号。新增型号放入项目 models/ 目录(含 processed/manifest.json)后会自动出现在此列表。</div>
+      <div class="model-cards" id="modelcards"></div>
+      <div class="btnrow"><button class="primary" id="btn-do-import" disabled>导入所选柜型</button></div>`;
+    const grid = $("#modelcards");
+    let selected = null;
+    list.models.forEach((m, i) => {
+      const el = document.createElement("div");
+      el.className = "model-card";
+      el.innerHTML = `
+        <div class="mc-name">${m.name}</div>
+        <div class="mc-id mono">型号标识:${m.id}</div>
+        <div class="mc-meta">${m.count} 件零件 · ${(m.total_tris/1e4).toFixed(1)} 万三角面 · 整柜 ${m.size_mm[0]}×${m.size_mm[1]}×${m.size_mm[2]} mm</div>`;
+      el.addEventListener("click", () => {
+        document.querySelectorAll(".model-card").forEach(c => c.classList.remove("sel"));
+        el.classList.add("sel");
+        selected = m;
+        $("#btn-do-import").disabled = false;
+      });
+      grid.appendChild(el);
+      if (i === 0){ el.classList.add("sel"); selected = m; $("#btn-do-import").disabled = false; }
+    });
+    $("#btn-do-import").addEventListener("click", () => doImportModel(selected));
+  }catch(e){ toast("柜型加载失败: " + e.message); }
+  finally{ card.classList.remove("active"); }
+}
+
+async function doImportModel(model){
+  $("#panel").innerHTML = `<h2>正在导入<span class="tag">${model.name}</span></h2><div class="hint">读取 ${model.path} 并渲染整柜预览 …</div>`;
+  try{
+    const data = await api("/api/import_model", {method:"POST", body:{model: model.id}});
     cache.model = data;
     $("#panel").innerHTML = `
-      <h2>电控柜模型<span class="tag">HXGN-12</span></h2>
-      <div class="preview-wrap"><img id="preview-img" src="/preview.png?v=${Date.now()}" alt="电控柜模型预览"></div>
+      <h2>电控柜模型<span class="tag">${data.name}</span></h2>
+      <div class="preview-wrap"><img id="preview-img" src="/preview.png?model=${encodeURIComponent(data.id)}&v=${Date.now()}" alt="电控柜模型预览"></div>
       <div class="hint" style="margin-top:-4px">SolidWorks 风格成品柜渲染(透视 + 材质光照 + 软阴影)。点击下方零件行,预览图中对应零件将以青色点亮;再次点击恢复整柜视图。</div>
       <div class="stats">
         <div class="stat"><div class="k">零部件数量</div><div class="v">${data.count}<small> 件(含预装内安装板)</small></div></div>
@@ -284,7 +346,7 @@ async function stepImport(card){
           <tr><td>${i+1}</td><td>${p.display}</td><td class="mono">${p.source}</td>
           <td class="mono">${p.tris.toLocaleString()}</td><td class="mono">${p.bbox_mm.join("×")}</td></tr>`).join("")}
         </tbody></table></div>
-      <div class="banner ok show">✓ 电控柜模型导入成功</div>`;
+      <div class="banner ok show">✓ ${data.name} 模型导入成功</div>`;
     document.querySelectorAll("#panel tbody tr").forEach((tr, i) => {
       const part = data.parts[i];
       tr.style.cursor = "pointer";
@@ -293,17 +355,16 @@ async function stepImport(card){
         const img = $("#preview-img");
         if (tr.classList.contains("row-hl")){
           tr.classList.remove("row-hl");
-          img.src = "/preview.png?v=" + Date.now();
+          img.src = "/preview.png?model=" + encodeURIComponent(data.id) + "&v=" + Date.now();
         } else {
           document.querySelectorAll("#panel tbody tr.row-hl").forEach(r => r.classList.remove("row-hl"));
           tr.classList.add("row-hl");
-          img.src = "/preview.png?part=" + encodeURIComponent(part.key) + "&v=" + Date.now();
+          img.src = "/preview.png?model=" + encodeURIComponent(data.id) + "&part=" + encodeURIComponent(part.key) + "&v=" + Date.now();
         }
       });
     });
     markDone("import");
   }catch(e){ toast("模型导入失败: " + e.message); }
-  finally{ card.classList.remove("active"); }
 }
 
 /* ================= step 2: 拆解工艺 ================= */
@@ -409,8 +470,8 @@ async function stepAssign(card){
   finally{ card.classList.remove("active"); }
 }
 
-/* ================= step 4-5: 运行与开始 ================= */
-let logOffset = 0, logTimer = null, simTimer = null;
+/* ================= step 4: 一键运行装配 ================= */
+let logOffset = 0, logTimer = null, simTimer = null, reportTimer = null;
 let simReady = false;
 let lastWizardKey = "";
 
@@ -419,45 +480,90 @@ function statusCard(){
     <div class="scard">
       <div class="k"><span class="dot" id="simdot"></span>CoppeliaSim 八臂系统</div>
       <div class="v" id="simstate">未启动</div>
-      <div class="meta" style="font-size:11.5px;color:var(--muted);margin-top:6px" id="simhint">点击左侧「运行装配任务」唤起 CoppeliaSim 并加载场景</div>
+      <div class="meta" style="font-size:11.5px;color:var(--muted);margin-top:6px" id="simhint">点击左侧「运行装配任务」一键启动仿真与装配</div>
     </div>
     <div class="scard">
       <div class="k"><span class="dot" id="ctrldot"></span>装配控制器</div>
       <div class="v" id="ctrlstate">待启动</div>
-      <div class="meta" style="font-size:11.5px;color:var(--muted);margin-top:6px">CoppeliaSim 就绪后点击「开始」运行装配</div>
+      <div class="meta" style="font-size:11.5px;color:var(--muted);margin-top:6px">第 2 台为黑色简化工艺柜,其余为标准柜</div>
     </div>`;
 }
 
 async function stepLaunch(card){
   card.classList.add("active");
   $("#panel").innerHTML = `
-    <h2>运行装配任务<span class="tag">唤起 CoppeliaSim</span></h2>
+    <h2>运行装配任务<span class="tag">四柜混线一键启动</span></h2>
     <div class="status-cards">${statusCard()}</div>
+    <div class="banner ok show">✓ 任务已下发:CoppeliaSim 就绪后将自动开始装配,无需再点击其他按钮</div>
+    <div class="btnrow"><button class="ghost" id="btn-stop">停止装配</button></div>
     <div class="console" id="logbox"><span class="l empty">正在发起启动请求 …</span></div>`;
   startLogPolling();
   startSimPolling();
+  $("#btn-stop").addEventListener("click", async () => {
+    try{
+      const res = await api("/api/stop_assembly", {method:"POST"});
+      toast(res.message || "已请求停止");
+    }catch(e){ toast("停止失败: " + e.message); }
+  });
   try{
-    await api("/api/launch_sim", {method:"POST"});
-    markDone("launch");
-  }catch(e){ toast("唤起失败: " + e.message); updateSimState(); }
+    const result = await api("/api/run_assembly", {method:"POST", body:{quantity:4}});
+    toast(result.message);
+  }catch(e){ toast("装配启动失败: " + e.message); updateSimState(); }
   finally{ card.classList.remove("active"); }
 }
 
-function refreshStepPanel(){
-  $("#panel").innerHTML = `
-    <h2>装配运行监控<span class="tag">CoppeliaSim + 控制器</span></h2>
-    <div class="status-cards">${statusCard()}</div>
-    <div class="console" id="logbox"><span class="l empty">日志将在此显示 …</span></div>`;
-  startLogPolling();
+function reportContent(report){
+  if (report.status === "empty"){
+    return `<div class="report-wait">装配数据尚未生成，请先运行装配任务。</div>`;
+  }
+  const processDone = report.modules.reduce((sum, item) => sum + item.done, 0);
+  const processTotal = report.modules.reduce((sum, item) => sum + item.total, 0);
+  const processPct = processTotal ? processDone / processTotal * 100 : 0;
+  return `
+    <div class="report-kpis">
+      <div class="report-kpi"><div class="k">整线工艺完工率</div><div class="v">${processPct.toFixed(1)}<span class="u">%</span></div></div>
+      <div class="report-kpi"><div class="k">已完工机械臂</div><div class="v">${report.arms_completed}<span class="u">/ ${report.arms_total} 台</span></div></div>
+      <div class="report-kpi"><div class="k">已完工柜体</div><div class="v">${report.jobs_completed}<span class="u">/ ${report.jobs} 台</span></div></div>
+    </div>
+    <h2>各工艺模块完工率<span class="tag">目标 100%</span></h2>
+    <div class="module-report">
+      ${report.modules.map(item => `
+        <div class="module-card">
+          <div class="module-head"><div><div class="module-name">${item.id} · ${item.name}</div><div class="mono">${item.done} / ${item.total} 道工序</div></div><div class="module-pct">${item.pct.toFixed(1)}%</div></div>
+          <div class="metric-bar"><i style="width:${Math.min(item.pct,100)}%"></i></div>
+        </div>`).join("")}
+    </div>
+    <h2>各机械臂执行时间<span class="tag">真实控制器计时</span></h2>
+    <div class="scroll"><table class="report-table">
+      <thead><tr><th>机械臂</th><th>执行职责</th><th>已完成/总工序</th><th>完工率</th><th>累计执行时间</th></tr></thead>
+      <tbody>${report.arms.map(arm => `
+        <tr><td><b>${arm.id}</b></td><td>${arm.name}</td><td class="mono">${arm.done} / ${arm.total}</td>
+        <td><div class="arm-progress-head"><div class="metric-bar"><i style="width:${Math.min(arm.pct,100)}%"></i></div><b>${arm.pct.toFixed(1)}%</b></div></td>
+        <td><b>${arm.seconds.toFixed(1)}</b> s</td></tr>`).join("")}</tbody>
+    </table></div>
+    <div class="hint">八臂累计有效执行时间:${report.total_seconds.toFixed(1)} s；并行工序的单臂时间分别统计。</div>`;
 }
 
-async function stepStart(card){
+async function refreshReport(){
+  const root = $("#report-root");
+  if (!root) return;
+  const data = await api("/api/report");
+  root.innerHTML = reportContent(data.report);
+  if (data.report.status === "finished"){
+    if (!done.has("report")) markDone("report");
+    if (reportTimer){ clearInterval(reportTimer); reportTimer = null; }
+  }
+}
+
+async function stepReport(card){
   card.classList.add("active");
-  refreshStepPanel();
+  $("#panel").innerHTML = `
+    <h2>生产完工统计<span class="tag">实时更新</span></h2>
+    <div id="report-root"><div class="report-wait">正在读取完工数据 …</div></div>`;
   try{
-    await api("/api/start_assembly", {method:"POST"});
-    markDone("start");
-  }catch(e){ toast("启动失败: " + e.message); updateChips(); updateSimState(); }
+    await refreshReport();
+    if (!reportTimer) reportTimer = setInterval(() => refreshReport().catch(()=>{}), 1200);
+  }catch(e){ toast("完工报告读取失败: " + e.message); }
   finally{ card.classList.remove("active"); }
 }
 
@@ -476,7 +582,8 @@ async function pollLog(){
       box.appendChild(div);
     });
     box.scrollTop = box.scrollHeight;
-    if (data.lines.some(l => l.includes("[done] cabinet assembly complete"))){
+    if (data.lines.some(l => l.includes("[done]") && l.includes("cabinets completed"))){
+      markDone("launch");
       const b = document.createElement("div");
       b.className = "banner ok show"; b.textContent = "✓ 装配完成";
       box.parentElement.insertBefore(b, box.nextSibling);
@@ -489,15 +596,19 @@ function startLogPolling(){
   logTimer = setInterval(()=>pollLog().catch(()=>{}), 1200);
 }
 const SIM_TEXT = {
-  idle: ["未启动", "点击左侧「运行装配任务」唤起 CoppeliaSim 并加载场景"],
+  idle: ["未启动", "点击左侧「运行装配任务」一键启动仿真与装配"],
   launching: ["启动中 …", "CoppeliaSim 正在加载八臂装配场景,请稍候"],
-  ready: ["已就绪", "仿真服务停止态,可以点击「开始」运行装配"],
+  ready: ["已就绪", "仿真服务已就绪,装配控制器将自动启动"],
   running: ["运行中", "仿真正在步进运行"],
-  error: ["启动失败", "请检查 COPPELIASIM_ROOT 与场景文件,详见日志"],
+  paused: ["已完成并暂停", "成品已进入末端成品区"],
+  error: ["已退出/未连接", "请点击左侧「运行装配任务」重新唤起 CoppeliaSim"],
 };
 async function updateSimState(){
   const data = await api("/api/state");
   const st = data.state;
+  if (st.ctrl === "exited" && st.ctrl_exit_code === 0 && !done.has("launch")){
+    done.add("launch");
+  }
   const wizardKey = st.sim + "|" + st.ctrl + "|" + st.ctrl_exit_code;
   if (wizardKey !== lastWizardKey){
     lastWizardKey = wizardKey;
@@ -507,18 +618,18 @@ async function updateSimState(){
   simReady = (st.sim === "ready");
   const chip = $("#chip-sim");
   chip.querySelector("b").textContent = text;
-  chip.className = "chip" + (st.sim==="ready" ? " ok" : st.sim==="error" ? " err" : st.sim==="launching"||st.sim==="running" ? " warn" : "");
+  chip.className = "chip" + (st.sim==="ready"||st.sim==="paused" ? " ok" : st.sim==="error" ? " err" : st.sim==="launching"||st.sim==="running" ? " warn" : "");
   const sdot = $("#simdot"), sstate = $("#simstate"), shint = $("#simhint");
   if (sdot){
-    sdot.className = "dot " + (st.sim==="launching"||st.sim==="running" ? "launching" : st.sim==="ready" ? "ready" : st.sim==="error" ? "error" : "");
+    sdot.className = "dot " + (st.sim==="launching"||st.sim==="running" ? "launching" : st.sim==="ready"||st.sim==="paused" ? "ready" : st.sim==="error" ? "error" : "");
     sstate.textContent = text; shint.textContent = hint;
   }
-  const [ct, ch] = {idle:["待启动",""], running:["运行中",""], exited:["已结束 (exit "+st.ctrl_exit_code+")",""], error:["错误",""]}[st.ctrl] || ["未知",""];
+  const [ct, ch] = {idle:["待启动",""], waiting:["正在准备场景",""], running:["运行中",""], exited:["已结束 (exit "+st.ctrl_exit_code+")",""], error:["错误",""]}[st.ctrl] || ["未知",""];
   $("#chip-ctrl").querySelector("b").textContent = ct;
-  $("#chip-ctrl").className = "chip" + (st.ctrl==="running" ? " warn" : st.ctrl==="exited" && st.ctrl_exit_code===0 ? " ok" : st.ctrl==="exited"||st.ctrl==="error" ? " err" : "");
+  $("#chip-ctrl").className = "chip" + (st.ctrl==="waiting"||st.ctrl==="running" ? " warn" : st.ctrl==="exited" && st.ctrl_exit_code===0 ? " ok" : st.ctrl==="exited"||st.ctrl==="error" ? " err" : "");
   const cdot = $("#ctrldot"), cstate = $("#ctrlstate");
   if (cdot){
-    cdot.className = "dot " + (st.ctrl==="running" ? "running" : st.ctrl==="exited" && st.ctrl_exit_code===0 ? "ok" : st.ctrl==="exited"||st.ctrl==="error" ? "error" : "");
+    cdot.className = "dot " + (st.ctrl==="waiting"||st.ctrl==="running" ? "running" : st.ctrl==="exited" && st.ctrl_exit_code===0 ? "ok" : st.ctrl==="exited"||st.ctrl==="error" ? "error" : "");
     cstate.textContent = ct;
   }
 }

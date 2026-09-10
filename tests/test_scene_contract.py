@@ -10,6 +10,7 @@ from scripts.build_cabinet_product_scene import (
     WB2_MICRO_INDEX_X,
     _load_manifest,
     build_paired_targets,
+    hide_teaching_targets,
 )
 from sim_bridge.process_manager import CoppeliaProcessManager
 from sim_bridge.scene_objects import (
@@ -46,6 +47,26 @@ class SceneContractTests(unittest.TestCase):
         self.assertEqual(scene.stat().st_size, self.contract["scene"]["size"])
         self.assertEqual(digest, self.contract["scene"]["sha256"])
         self.assertEqual(self.contract["scene"]["root"], SCENE_ROOT)
+
+    def test_teaching_targets_are_hidden_without_being_removed(self):
+        class FakeSim:
+            handle_all = -2
+            objintparam_visibility_layer = 10
+
+            def __init__(self):
+                self.layers = {}
+
+            def getObjectsInTree(self, root, object_type, options):
+                self.asserted_call = (root, object_type, options)
+                return [root, 101, 102]
+
+            def setObjectInt32Param(self, handle, parameter, value):
+                self.layers[handle] = (parameter, value)
+
+        sim = FakeSim()
+        self.assertEqual(hide_teaching_targets(sim, 100), 3)
+        self.assertEqual(set(sim.layers), {100, 101, 102})
+        self.assertTrue(all(value == (10, 0) for value in sim.layers.values()))
 
     def test_software_launcher_uses_the_contract_scene(self):
         manager = CoppeliaProcessManager()
