@@ -19,7 +19,7 @@
 | 工艺自动拆解 | `test/decompose_assembly.py`：STL 解析 → 接触图 → 装配顺序 DAG → 工艺分类 → 8 臂能力映射（输入一个装配好的柜体模型，输出工艺链 JSON） | MVP 已可用（含 tkinter 界面 `test/import_cabinet_ui.py`） |
 | 运动规划与执行 | `configs/motion_planning_policy.yaml` + `scripts/run_8arm_cabinet_assembly.py`：竖直 Π 形模板 → 分级回退 → 机间碰撞预检 → 确定性步进回放 | 按真实柜壳检查碰撞、实际抓取接触及释放误差；重验证中 |
 | 固定路径数据 | `data/fixed_paths/eight_arm_cabinet.json`（历史正式计划）与 `.partial.json`（新检查点） | 当前规划器要求 schema 36；旧 schema 34/35 不可直接执行 |
-| 调度与编排 | `scripts/run_8arm_pipeline_assembly.py`：三柜独立托盘/零件/事件上下文，模块完成事件立即续接，三级填充与排空 | 已消除跨模块齐步等待，并完成三柜成品直线队列回放 |
+| 调度与编排 | `scripts/run_8arm_pipeline_assembly.py`：三柜独立上下文、依赖图调度、供料区预抓、安装区单臂互斥 | 已完成最高五臂交错回放；瓶颈模块二在 speed=3 下由 1583 降至 1323 显示帧，约缩短 16.4% |
 
 机械臂分工（当前权威分工见 `configs/assembly_task_assignment.yaml` 与场景目标点）：
 

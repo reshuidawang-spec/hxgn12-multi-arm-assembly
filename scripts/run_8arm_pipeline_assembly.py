@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -30,6 +29,7 @@ from scripts.run_8arm_cabinet_assembly import (  # noqa: E402
     RemoteAPIClient,
     Scene,
     Track,
+    action_workspace,
     fingerprint,
     motion_policy_matches,
     require_open_top_shell,
@@ -80,6 +80,12 @@ class PipelineOperation:
     stem: str | None = None
     key: str | None = None
     station: str | None = None
+
+
+def operation_id(operation: PipelineOperation) -> str:
+    if operation.kind == "index":
+        return f"index:{operation.station}"
+    return f"{operation.robot}:{operation.stem}"
 
 
 def _pick(robot: str, stem: str, key: str, label: str) -> PipelineOperation:
@@ -155,6 +161,61 @@ MODULE_OPERATIONS = {
             for index in range(1, 5)
         ),
     ),
+}
+
+
+def _after(*operation_ids: str) -> frozenset[str]:
+    return frozenset(operation_ids)
+
+
+# Dependencies express process truth, not artificial synchronized waves.
+# Source picks have no public-workspace reservation, so the next robot may
+# prefetch while the current robot installs.  Place and screw paths retain
+# the single-entry workspace interlock enforced by the scheduler.
+MODULE_DEPENDENCIES: dict[int, dict[str, frozenset[str]]] = {
+    1: {
+        "R1:SHELL_PICK": _after(),
+        "R1:WB1_PLACE": _after("R1:SHELL_PICK"),
+        "R2:RAIL_PICK_H": _after("R1:SHELL_PICK"),
+        "R2:RAIL_PLACE_H": _after("R1:WB1_PLACE", "R2:RAIL_PICK_H"),
+        # R2 place and R3 pick look independent at the task level, but their
+        # measured paths intersect (R2 Link3 versus R3 Link2).  Keep this
+        # physical interlock while retaining R2 prefetch during R1 place.
+        "R3:RAIL_PICK_A": _after("R2:RAIL_PLACE_H"),
+        "R3:RAIL_PLACE_A": _after("R2:RAIL_PLACE_H", "R3:RAIL_PICK_A"),
+        "index:wb1_micro": _after("R3:RAIL_PLACE_A"),
+        "R3:RAIL_PICK_B": _after("index:wb1_micro"),
+        "R3:RAIL_PLACE_B": _after("R3:RAIL_PICK_B"),
+    },
+    2: {
+        "R4:PSU_PICK": _after(),
+        "R4:PSU_PLACE": _after("R4:PSU_PICK"),
+        "R5:PLC_PICK": _after("R4:PSU_PICK"),
+        "R4:SERVO_PICK": _after("R4:PSU_PLACE"),
+        "R4:SERVO_PLACE": _after("R4:SERVO_PICK"),
+        "R4:EDS_PICK": _after("R4:SERVO_PLACE"),
+        "R5:PLC_PLACE": _after("R4:SERVO_PLACE", "R5:PLC_PICK"),
+        "R4:EDS_PLACE": _after("R4:EDS_PICK", "R5:PLC_PLACE"),
+        "R5:DMA_PICK": _after("R5:PLC_PLACE"),
+        "R5:DMA_PLACE": _after("R4:EDS_PLACE", "R5:DMA_PICK"),
+        "R6:CONTACTOR_PICK": _after("R4:EDS_PLACE"),
+        "index:wb2_micro": _after("R5:DMA_PLACE", "R6:CONTACTOR_PICK"),
+        "R6:CONTACTOR_PLACE": _after(
+            "index:wb2_micro", "R6:CONTACTOR_PICK"
+        ),
+        "R6:BREAKER_PICK": _after("R6:CONTACTOR_PLACE"),
+        "R6:BREAKER_PLACE": _after("R6:BREAKER_PICK"),
+    },
+    3: {
+        "R8:COM5_PICK": _after(),
+        "R8:COM5_PLACE": _after("R8:COM5_PICK"),
+        "R8:FILTER_PICK": _after("R8:COM5_PLACE"),
+        "R8:FILTER_PLACE": _after("R8:FILTER_PICK"),
+        "R7:SCREW_1": _after("R8:FILTER_PLACE"),
+        "R7:SCREW_2": _after("R7:SCREW_1"),
+        "R7:SCREW_3": _after("R7:SCREW_2"),
+        "R7:SCREW_4": _after("R7:SCREW_3"),
+    },
 }
 
 
@@ -514,74 +575,119 @@ def execute_takt(
     master: AssemblyRuntime,
     assignments: dict[int, PipelineJob],
 ) -> None:
-    """Run modules independently; completion of one never waits for another."""
-    queues = {
-        module: deque(MODULE_OPERATIONS[module])
+    """Run dependency-ready picks and workspace-safe installs concurrently."""
+    pending = {
+        module: {
+            operation_id(operation): operation
+            for operation in MODULE_OPERATIONS[module]
+        }
         for module in assignments
     }
-    active: dict[int, ActiveMotion] = {}
+    completed = {module: set() for module in assignments}
+    active: dict[tuple[int, str], ActiveMotion] = {}
     launch_number = 0
     try:
-        while any(queues.values()) or active:
-            # A module that has returned to PARK immediately launches its next
-            # operation.  Other modules keep their own independent cursors.
-            for module in sorted(queues):
-                if module in active:
-                    continue
-                while queues[module]:
-                    operation = queues[module].popleft()
-                    job = assignments[module]
-                    if operation.kind == "index":
-                        assert operation.station
+        while any(pending.values()) or active:
+            launched_or_indexed = False
+            # Scan until no additional dependency-ready work fits the current
+            # robot/workspace reservations.  This lets a source prefetch start
+            # in the same simulation frame as another robot's installation.
+            rescan = True
+            while rescan:
+                rescan = False
+                active_robots = {
+                    motion.track.robot for motion in active.values()
+                }
+                occupied_workspaces = {
+                    str(motion.track.workspace)
+                    for motion in active.values()
+                    if motion.track.workspace is not None
+                }
+                for module in sorted(pending):
+                    for key, operation in list(pending[module].items()):
+                        dependencies = MODULE_DEPENDENCIES[module][key]
+                        if not dependencies.issubset(completed[module]):
+                            continue
+                        job = assignments[module]
+                        if operation.kind == "index":
+                            # Every arm in this module must have returned to
+                            # its accepted stow before its carrier moves.
+                            if any(
+                                motion.module == module
+                                for motion in active.values()
+                            ):
+                                continue
+                            assert operation.station
+                            print(
+                                f"[pipeline event] M{module}/J{job.number}: "
+                                f"{operation.label}",
+                                flush=True,
+                            )
+                            job.runtime.index_pallet(
+                                operation.station,
+                                wait_for=(),
+                                emits=(
+                                    f"J{job.number}_{operation.station.upper()}"
+                                ),
+                                interlock_robots=MODULE_ROBOTS[module],
+                            )
+                            del pending[module][key]
+                            completed[module].add(key)
+                            launched_or_indexed = True
+                            rescan = True
+                            break
+
+                        assert operation.robot
+                        if operation.robot in active_robots:
+                            continue
+                        # ``start_motion`` resolves the authoritative action
+                        # workspace.  The cheap lookup below avoids allocating
+                        # collision collections for a currently occupied one.
+                        workspace = action_workspace(
+                            operation.robot, str(operation.stem)
+                        )
+                        if (
+                            workspace is not None
+                            and workspace in occupied_workspaces
+                        ):
+                            continue
+                        launch_number += 1
+                        motion = start_motion(
+                            master, module, job, operation
+                        )
+                        active[(module, key)] = motion
+                        del pending[module][key]
+                        active_robots.add(motion.track.robot)
+                        if motion.track.workspace is not None:
+                            occupied_workspaces.add(
+                                str(motion.track.workspace)
+                            )
+                        launched_or_indexed = True
+                        rescan = True
                         print(
-                            f"[pipeline event] M{module}/J{job.number}: "
-                            f"{operation.label}",
+                            f"[pipeline launch {launch_number}] "
+                            f"M{module}/J{job.number}: {operation.label}",
                             flush=True,
                         )
-                        job.runtime.index_pallet(
-                            operation.station,
-                            wait_for=(),
-                            emits=(
-                                f"J{job.number}_{operation.station.upper()}"
-                            ),
-                            interlock_robots=MODULE_ROBOTS[module],
-                        )
-                        continue
-                    launch_number += 1
-                    motion = start_motion(
-                        master, module, job, operation
-                    )
-                    if any(
-                        other.track.robot == motion.track.robot
-                        for other in active.values()
-                    ):
-                        finish_motion(master, motion)
-                        raise RuntimeError(
-                            f"concurrent duplicate robot {motion.track.robot}"
-                        )
-                    occupied = {
-                        str(other.track.workspace)
-                        for other in active.values()
-                        if other.track.workspace is not None
-                    }
-                    if (
-                        motion.track.workspace is not None
-                        and str(motion.track.workspace) in occupied
-                    ):
-                        finish_motion(master, motion)
-                        raise RuntimeError(
-                            "shared-workspace interlock rejected concurrent "
-                            f"entry to {motion.track.workspace}"
-                        )
-                    active[module] = motion
-                    print(
-                        f"[pipeline launch {launch_number}] "
-                        f"M{module}/J{job.number}: {operation.label}",
-                        flush=True,
-                    )
-                    break
+                    if rescan:
+                        break
 
             if not active:
+                if any(pending.values()) and not launched_or_indexed:
+                    blocked = {
+                        module: {
+                            key: sorted(
+                                MODULE_DEPENDENCIES[module][key]
+                                - completed[module]
+                            )
+                            for key in operations
+                        }
+                        for module, operations in pending.items()
+                        if operations
+                    }
+                    raise RuntimeError(
+                        f"pipeline dependency deadlock: {blocked}"
+                    )
                 continue
 
             positions: dict[str, list[float]] = {}
@@ -607,8 +713,8 @@ def execute_takt(
                 )
                 raise RuntimeError(f"{exc} during {context}") from exc
 
-            completed: list[int] = []
-            for module, motion in active.items():
+            finished: list[tuple[int, str]] = []
+            for active_key, motion in active.items():
                 if (
                     not motion.callback_fired
                     and motion.frame_index >= motion.track.tcp_frame
@@ -617,14 +723,16 @@ def execute_takt(
                     motion.callback_fired = True
                 motion.cursor += 1
                 if motion.cursor >= len(motion.indices):
-                    completed.append(module)
+                    finished.append(active_key)
             step_simulation(master.scene.client)
-            for module in completed:
-                motion = active.pop(module)
+            for active_key in finished:
+                motion = active.pop(active_key)
+                module, key = active_key
                 finish_motion(master, motion)
+                completed[module].add(key)
                 print(
                     f"[pipeline ready] M{module}/J{motion.job.number}: "
-                    f"{motion.operation.label} complete; next starts now",
+                    f"{motion.operation.label} complete; dependencies released",
                     flush=True,
                 )
     finally:

@@ -18,6 +18,20 @@ policy:
   output_transport: straight_positive_x_on_extended_process_conveyor
   finished_queue_x_m: [2.55, 2.07, 1.59]
   finished_bin_center_m: [3.32, 0.25]
+  intra_module_prefetch:
+    public_workspace_1:
+      - concurrent: [R1_WB1_PLACE, R2_RAIL_PICK_H]
+      - forbidden_collision_pair: [R2_RAIL_PLACE_H, R3_RAIL_PICK_A]
+        reason: R2_Link3_intersects_R3_Link2
+    public_workspace_2:
+      - concurrent: [R4_PSU_PLACE, R5_PLC_PICK]
+      - concurrent: [R4_EDS_PICK, R5_PLC_PLACE]
+      - concurrent: [R4_EDS_PLACE, R5_DMA_PICK]
+      - concurrent: [R5_DMA_PLACE, R6_CONTACTOR_PICK]
+  speed_3_visual_frame_estimate:
+    module_1: {serial: 1028, optimized: 996, reduction_percent: 3.1}
+    module_2: {serial: 1583, optimized: 1323, reduction_percent: 16.4}
+    module_3: {serial: 824, optimized: 824, reduction_percent: 0.0}
   installation_order: large_and_deep_parts_before_small_and_near_parts
 
 workspaces:

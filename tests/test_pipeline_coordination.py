@@ -8,8 +8,10 @@ from scripts.run_8arm_cabinet_assembly import (
     action_workspace,
 )
 from scripts.run_8arm_pipeline_assembly import (
+    MODULE_DEPENDENCIES,
     MODULE_OPERATIONS,
     MODULE_ROBOTS,
+    operation_id,
     pipeline_takts,
 )
 
@@ -90,6 +92,77 @@ class PipelineCoordinationTests(unittest.TestCase):
         self.assertEqual(runtime.scaled_transport_steps(80, minimum=24), 27)
         self.assertEqual(runtime.scaled_transport_steps(60, minimum=8), 20)
         self.assertEqual(runtime.scaled_transport_steps(100, minimum=16), 34)
+
+    def test_dependency_graph_covers_operations_and_is_acyclic(self):
+        for module, operations in MODULE_OPERATIONS.items():
+            operation_ids = {operation_id(operation) for operation in operations}
+            self.assertEqual(set(MODULE_DEPENDENCIES[module]), operation_ids)
+            self.assertTrue(
+                all(
+                    dependencies.issubset(operation_ids)
+                    for dependencies in MODULE_DEPENDENCIES[module].values()
+                )
+            )
+            completed: set[str] = set()
+            pending = set(operation_ids)
+            while pending:
+                ready = {
+                    key for key in pending
+                    if MODULE_DEPENDENCIES[module][key].issubset(completed)
+                }
+                self.assertTrue(ready, f"cyclic module {module}: {pending}")
+                pending -= ready
+                completed |= ready
+
+    def test_module_one_exposes_safe_prefetch_pairs(self):
+        dependencies = MODULE_DEPENDENCIES[1]
+        after_shell_pick = {"R1:SHELL_PICK"}
+        self.assertTrue(
+            dependencies["R1:WB1_PLACE"].issubset(after_shell_pick)
+        )
+        self.assertTrue(
+            dependencies["R2:RAIL_PICK_H"].issubset(after_shell_pick)
+        )
+        before_horizontal_place = {
+            "R1:SHELL_PICK", "R1:WB1_PLACE", "R2:RAIL_PICK_H"
+        }
+        self.assertTrue(
+            dependencies["R2:RAIL_PLACE_H"].issubset(
+                before_horizontal_place
+            )
+        )
+        self.assertEqual(
+            dependencies["R3:RAIL_PICK_A"], {"R2:RAIL_PLACE_H"}
+        )
+
+    def test_module_two_exposes_requested_prefetch_pairs(self):
+        dependencies = MODULE_DEPENDENCIES[2]
+        after_psu_pick = {"R4:PSU_PICK"}
+        self.assertTrue(
+            dependencies["R4:PSU_PLACE"].issubset(after_psu_pick)
+        )
+        self.assertTrue(
+            dependencies["R5:PLC_PICK"].issubset(after_psu_pick)
+        )
+        after_servo = after_psu_pick | {
+            "R4:PSU_PLACE", "R4:SERVO_PICK", "R4:SERVO_PLACE",
+            "R5:PLC_PICK",
+        }
+        self.assertTrue(
+            dependencies["R4:EDS_PICK"].issubset(after_servo)
+        )
+        self.assertTrue(
+            dependencies["R5:PLC_PLACE"].issubset(after_servo)
+        )
+        after_plc_and_eds_pick = after_servo | {
+            "R4:EDS_PICK", "R5:PLC_PLACE",
+        }
+        self.assertTrue(
+            dependencies["R4:EDS_PLACE"].issubset(after_plc_and_eds_pick)
+        )
+        self.assertTrue(
+            dependencies["R5:DMA_PICK"].issubset(after_plc_and_eds_pick)
+        )
 
 
 if __name__ == "__main__":
