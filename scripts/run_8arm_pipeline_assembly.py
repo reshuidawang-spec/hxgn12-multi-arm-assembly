@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Run up to three cabinets as a conservative three-module pipeline.
 
-Each public workspace admits at most one installation track at a time, while
-different workspaces replay concurrently.  Every cabinet owns a pallet,
-workpiece set, assembly root, and event context; accepted fixed robot paths
-remain unchanged.
+Each public workspace admits at most one installation track at a time by
+default, while different workspaces replay concurrently.  An opt-in guarded
+experiment permits R7 and R8 to enter opposite sides of workspace 3 together;
+accepted fixed robot paths remain unchanged.
 """
 
 from __future__ import annotations
@@ -65,6 +65,16 @@ MODULE_ROBOTS = {
     2: ("R4", "R5", "R6"),
     3: ("R7", "R8"),
 }
+
+# Only the two left-side screw points are far enough from R8's filter TCP for
+# the first dual-entry experiment (measured TCP separation: 344/377 mm).  The
+# right-side screw points remain serialized because they are 64/169 mm away.
+R7_R8_DUAL_ENTRY_PAIRS = frozenset(
+    {
+        frozenset({"R7:SCREW_1", "R8:FILTER_PLACE"}),
+        frozenset({"R7:SCREW_2", "R8:FILTER_PLACE"}),
+    }
+)
 
 
 def step_simulation(client: RemoteAPIClient) -> None:
@@ -255,12 +265,26 @@ def operations_for_job(
 
 
 def dependencies_for_job(
-    job: PipelineJob, module: int
+    job: PipelineJob,
+    module: int,
+    *,
+    r7_r8_dual_entry: bool = False,
 ) -> dict[str, frozenset[str]]:
     """Bypass skipped recipe nodes while preserving their prerequisites."""
     enabled = {
         operation_id(operation) for operation in operations_for_job(job, module)
     }
+    dependency_graph = dict(MODULE_DEPENDENCIES[module])
+    if (
+        r7_r8_dual_entry
+        and module == 3
+        and "R8:FILTER_PLACE" in enabled
+    ):
+        # R7 may begin on the far-left screw pair after COM5 is seated while
+        # R8 fetches and installs the filter on the right.  R7 screws 3/4
+        # still transitively wait for screw 2 and the workspace guard below
+        # serializes them against FILTER_PLACE.
+        dependency_graph["R7:SCREW_1"] = _after("R8:COM5_PLACE")
 
     def expand(key: str, trail: frozenset[str]) -> set[str]:
         if key in enabled:
@@ -268,18 +292,51 @@ def dependencies_for_job(
         if key in trail:
             raise RuntimeError(f"cyclic recipe dependency at {key}")
         result: set[str] = set()
-        for dependency in MODULE_DEPENDENCIES[module][key]:
+        for dependency in dependency_graph[key]:
             result.update(expand(dependency, trail | {key}))
         return result
 
     return {
         key: frozenset(
             dependency
-            for source in MODULE_DEPENDENCIES[module][key]
+            for source in dependency_graph[key]
             for dependency in expand(source, frozenset({key}))
         )
         for key in enabled
     }
+
+
+def r7_r8_dual_entry_compatible(first: str, second: str) -> bool:
+    """Return whether two operation IDs use the approved opposite-side zone."""
+    return frozenset({first, second}) in R7_R8_DUAL_ENTRY_PAIRS
+
+
+def workspace_is_available(
+    active: dict[tuple[int, str], "ActiveMotion"],
+    *,
+    module: int,
+    job: PipelineJob,
+    operation_key: str,
+    workspace: str | None,
+    r7_r8_dual_entry: bool,
+) -> bool:
+    """Apply the default mutex plus the narrow R7/R8 workspace-3 exception."""
+    if workspace is None:
+        return True
+    for motion in active.values():
+        if motion.track.workspace != workspace:
+            continue
+        same_cabinet = motion.module == module == 3 and motion.job is job
+        if (
+            r7_r8_dual_entry
+            and same_cabinet
+            and r7_r8_dual_entry_compatible(
+                operation_id(motion.operation), operation_key
+            )
+        ):
+            continue
+        return False
+    return True
 
 
 @dataclass
@@ -648,6 +705,8 @@ def retire_job(job: PipelineJob) -> None:
 def execute_takt(
     master: AssemblyRuntime,
     assignments: dict[int, PipelineJob],
+    *,
+    r7_r8_dual_entry: bool = False,
 ) -> None:
     """Run dependency-ready picks and workspace-safe installs concurrently."""
     pending = {
@@ -658,7 +717,11 @@ def execute_takt(
         for module in assignments
     }
     dependencies = {
-        module: dependencies_for_job(assignments[module], module)
+        module: dependencies_for_job(
+            assignments[module],
+            module,
+            r7_r8_dual_entry=r7_r8_dual_entry,
+        )
         for module in assignments
     }
     completed = {module: set() for module in assignments}
@@ -675,11 +738,6 @@ def execute_takt(
                 rescan = False
                 active_robots = {
                     motion.track.robot for motion in active.values()
-                }
-                occupied_workspaces = {
-                    str(motion.track.workspace)
-                    for motion in active.values()
-                    if motion.track.workspace is not None
                 }
                 for module in sorted(pending):
                     for key, operation in list(pending[module].items()):
@@ -738,9 +796,13 @@ def execute_takt(
                         workspace = action_workspace(
                             operation.robot, str(operation.stem)
                         )
-                        if (
-                            workspace is not None
-                            and workspace in occupied_workspaces
+                        if not workspace_is_available(
+                            active,
+                            module=module,
+                            job=job,
+                            operation_key=key,
+                            workspace=workspace,
+                            r7_r8_dual_entry=r7_r8_dual_entry,
                         ):
                             continue
                         launch_number += 1
@@ -751,10 +813,6 @@ def execute_takt(
                         active[(module, key)] = motion
                         del pending[module][key]
                         active_robots.add(motion.track.robot)
-                        if motion.track.workspace is not None:
-                            occupied_workspaces.add(
-                                str(motion.track.workspace)
-                            )
                         launched_or_indexed = True
                         rescan = True
                         print(
@@ -952,6 +1010,14 @@ def parse_args() -> argparse.Namespace:
         help="job number using the reduced process recipe; 0 disables",
     )
     parser.add_argument("--speed", type=float, default=3.0)
+    parser.add_argument(
+        "--r7-r8-dual-entry",
+        action="store_true",
+        help=(
+            "EXPERIMENTAL: allow R7 screws 1/2 and R8 filter placement to "
+            "share opposite sides of workspace 3; default remains serialized"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1019,6 +1085,12 @@ def main() -> int:
         ),
         flush=True,
     )
+    if args.r7_r8_dual_entry:
+        print(
+            "[dual-entry] guarded R7 screw 1/2 + R8 filter overlap enabled; "
+            "R7 screw 3/4 remain serialized",
+            flush=True,
+        )
     master = jobs[0].runtime
     scene.set_all_home()
     master.move_to_stows(simulate=False)
@@ -1058,7 +1130,11 @@ def main() -> int:
                 advance_infeed_queue(jobs, assignments[1])
             for module in sorted(assignments, reverse=True):
                 enter_module(assignments[module], module)
-            execute_takt(master, assignments)
+            execute_takt(
+                master,
+                assignments,
+                r7_r8_dual_entry=args.r7_r8_dual_entry,
+            )
             for module, job in assignments.items():
                 job.completed_module = module
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
 from scripts.run_8arm_cabinet_assembly import (
     ACTION_TARGETS,
@@ -16,6 +17,8 @@ from scripts.run_8arm_pipeline_assembly import (
     operation_id,
     operations_for_job,
     pipeline_takts,
+    r7_r8_dual_entry_compatible,
+    workspace_is_available,
 )
 
 
@@ -207,6 +210,74 @@ class PipelineCoordinationTests(unittest.TestCase):
         module_three = dependencies_for_job(job, 3)
         self.assertEqual(
             module_three["R7:SCREW_1"], {"R8:COM5_PLACE"}
+        )
+
+    def test_r7_r8_dual_entry_is_opt_in_and_limited_to_far_screws(self):
+        job = PipelineJob(1, object())  # type: ignore[arg-type]
+        default = dependencies_for_job(job, 3)
+        experimental = dependencies_for_job(
+            job, 3, r7_r8_dual_entry=True
+        )
+
+        self.assertEqual(default["R7:SCREW_1"], {"R8:FILTER_PLACE"})
+        self.assertEqual(experimental["R7:SCREW_1"], {"R8:COM5_PLACE"})
+        self.assertTrue(
+            r7_r8_dual_entry_compatible(
+                "R7:SCREW_1", "R8:FILTER_PLACE"
+            )
+        )
+        self.assertTrue(
+            r7_r8_dual_entry_compatible(
+                "R7:SCREW_2", "R8:FILTER_PLACE"
+            )
+        )
+        self.assertFalse(
+            r7_r8_dual_entry_compatible(
+                "R7:SCREW_3", "R8:FILTER_PLACE"
+            )
+        )
+
+    def test_workspace_mutex_only_opens_for_same_cabinet_approved_pair(self):
+        job = PipelineJob(1, object())  # type: ignore[arg-type]
+        other_job = PipelineJob(2, object())  # type: ignore[arg-type]
+        filter_place = next(
+            operation
+            for operation in MODULE_OPERATIONS[3]
+            if operation_id(operation) == "R8:FILTER_PLACE"
+        )
+        active = {
+            (3, "R8:FILTER_PLACE"): SimpleNamespace(
+                module=3,
+                job=job,
+                operation=filter_place,
+                track=SimpleNamespace(workspace="public_workspace_3"),
+            )
+        }
+
+        arguments = {
+            "active": active,
+            "module": 3,
+            "job": job,
+            "operation_key": "R7:SCREW_1",
+            "workspace": "public_workspace_3",
+        }
+        self.assertFalse(
+            workspace_is_available(**arguments, r7_r8_dual_entry=False)
+        )
+        self.assertTrue(
+            workspace_is_available(**arguments, r7_r8_dual_entry=True)
+        )
+        self.assertFalse(
+            workspace_is_available(
+                **{**arguments, "operation_key": "R7:SCREW_3"},
+                r7_r8_dual_entry=True,
+            )
+        )
+        self.assertFalse(
+            workspace_is_available(
+                **{**arguments, "job": other_job},
+                r7_r8_dual_entry=True,
+            )
         )
 
 
