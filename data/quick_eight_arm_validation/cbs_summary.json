@@ -1,0 +1,141 @@
+{
+  "scope": "region-time-window CBS only; continuous geometry excluded",
+  "cases": {
+    "opposite_pass": {
+      "solved": true,
+      "expanded_nodes": 2,
+      "added_wait": 10.0,
+      "cost": 42.0,
+      "windows": [
+        {
+          "agent": "R4",
+          "zone": "workspace_2",
+          "start": 0.0,
+          "end": 12.0,
+          "priority": 1
+        },
+        {
+          "agent": "R5",
+          "zone": "workspace_2",
+          "start": 12.0,
+          "end": 22.0,
+          "priority": 1
+        }
+      ]
+    },
+    "crossing_two_zones": {
+      "solved": true,
+      "expanded_nodes": 22,
+      "added_wait": 14.0,
+      "cost": 54.75,
+      "windows": [
+        {
+          "agent": "R2",
+          "zone": "workspace_1",
+          "start": 14.0,
+          "end": 22.0,
+          "priority": 1
+        },
+        {
+          "agent": "R2",
+          "zone": "transfer",
+          "start": 23.0,
+          "end": 30.0,
+          "priority": 1
+        },
+        {
+          "agent": "R3",
+          "zone": "transfer",
+          "start": 1.0,
+          "end": 9.0,
+          "priority": 1
+        },
+        {
+          "agent": "R3",
+          "zone": "workspace_1",
+          "start": 7.0,
+          "end": 14.0,
+          "priority": 1
+        }
+      ]
+    },
+    "urgent_yield": {
+      "solved": true,
+      "expanded_nodes": 2,
+      "added_wait": 11.0,
+      "cost": 53.5,
+      "windows": [
+        {
+          "agent": "R7_NORMAL",
+          "zone": "workspace_3",
+          "start": 11.0,
+          "end": 25.0,
+          "priority": 1
+        },
+        {
+          "agent": "R8_URGENT",
+          "zone": "workspace_3",
+          "start": 2.0,
+          "end": 11.0,
+          "priority": 5
+        }
+      ]
+    },
+    "three_arm_chain": {
+      "solved": true,
+      "expanded_nodes": 2,
+      "added_wait": 8.0,
+      "cost": 71.0,
+      "windows": [
+        {
+          "agent": "R4",
+          "zone": "workspace_2",
+          "start": 0.0,
+          "end": 10.0,
+          "priority": 1
+        },
+        {
+          "agent": "R5",
+          "zone": "workspace_2",
+          "start": 10.0,
+          "end": 18.0,
+          "priority": 2
+        },
+        {
+          "agent": "R5",
+          "zone": "workspace_3",
+          "start": 19.0,
+          "end": 27.0,
+          "priority": 2
+        },
+        {
+          "agent": "R6",
+          "zone": "workspace_3",
+          "start": 4.0,
+          "end": 16.0,
+          "priority": 1
+        }
+      ]
+    }
+  },
+  "r7_r8_comparison": [
+    {
+      "strategy": "uncoordinated",
+      "conflicts": 1,
+      "added_wait": 0.0,
+      "urgent_completion": 11.0
+    },
+    {
+      "strategy": "fixed_normal_first_mutex",
+      "conflicts": 0,
+      "added_wait": 12.0,
+      "urgent_completion": 23.0
+    },
+    {
+      "strategy": "priority_cbs",
+      "conflicts": 0,
+      "added_wait": 11.0,
+      "urgent_completion": 11.0
+    }
+  ]
+}

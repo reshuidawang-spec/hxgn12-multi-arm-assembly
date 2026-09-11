@@ -1,0 +1,210 @@
+{
+  "scope": "scheduling-only; no geometric, controller, or hardware claim",
+  "plan": "data/fixed_paths/eight_arm_cabinet.json",
+  "trajectory_action_count": 30,
+  "module_duration_frames": {
+    "standard": [
+      2860.0,
+      3810.0,
+      2406.0
+    ],
+    "reduced": [
+      2860.0,
+      2956.0,
+      1158.0
+    ]
+  },
+  "example_jobs": [
+    {
+      "job_id": "J1",
+      "recipe": "standard",
+      "arrival": 0.0,
+      "due": 13160.199999999999,
+      "priority": 1
+    },
+    {
+      "job_id": "J2",
+      "recipe": "reduced",
+      "arrival": 0.0,
+      "due": 11345.0,
+      "priority": 2
+    },
+    {
+      "job_id": "J3",
+      "recipe": "standard",
+      "arrival": 726.08,
+      "due": 14067.800000000001,
+      "priority": 1
+    },
+    {
+      "job_id": "J4_URGENT",
+      "recipe": "standard",
+      "arrival": 1633.6799999999998,
+      "due": 8622.199999999999,
+      "priority": 5
+    }
+  ],
+  "example_results": [
+    {
+      "policy": "serial",
+      "makespan": 34202.0,
+      "weighted_tardiness": 148367.2,
+      "mean_waiting": 3991.02,
+      "urgent_response": 23492.32,
+      "urgent_completion": 32568.32
+    },
+    {
+      "policy": "fifo",
+      "makespan": 19652.0,
+      "weighted_tardiness": 56923.200000000004,
+      "mean_waiting": 1566.02,
+      "urgent_response": 6946.32,
+      "urgent_completion": 18018.32
+    },
+    {
+      "policy": "dynamic",
+      "makespan": 19652.0,
+      "weighted_tardiness": 25315.000000000007,
+      "mean_waiting": 1494.8533333333335,
+      "urgent_response": 1226.3200000000002,
+      "urgent_completion": 10398.32
+    }
+  ],
+  "random_samples": 200,
+  "paired_delta_dynamic_minus_fifo": {
+    "makespan": {
+      "mean": -49.92,
+      "ci95_low": -118.93153813797841,
+      "ci95_high": 19.091538137978404,
+      "dynamic_better_rate": 0.1
+    },
+    "weighted_tardiness": {
+      "mean": -6273.966058607106,
+      "ci95_low": -7453.93882756876,
+      "ci95_high": -5093.993289645452,
+      "dynamic_better_rate": 0.595
+    },
+    "urgent_response": {
+      "mean": -698.3166666666667,
+      "ci95_low": -940.469816709127,
+      "ci95_high": -456.1635166242064,
+      "dynamic_better_rate": 0.28
+    },
+    "urgent_completion": {
+      "mean": -873.6975,
+      "ci95_low": -1182.225582270257,
+      "ci95_high": -565.1694177297429,
+      "dynamic_better_rate": 0.29
+    }
+  },
+  "weight_sensitivity": [
+    {
+      "name": "default",
+      "weights": {
+        "priority": 0.45,
+        "due": 0.3,
+        "waiting": 0.15,
+        "critical": 0.1
+      },
+      "makespan": 19348.22,
+      "weighted_tardiness": 32631.21427712092,
+      "urgent_completion": 8395.233333333334
+    },
+    {
+      "name": "no_priority",
+      "weights": {
+        "priority": 0.0,
+        "due": 0.3,
+        "waiting": 0.15,
+        "critical": 0.1
+      },
+      "makespan": 19335.74,
+      "weighted_tardiness": 34866.08710031263,
+      "urgent_completion": 8496.833333333334
+    },
+    {
+      "name": "no_due",
+      "weights": {
+        "priority": 0.45,
+        "due": 0.0,
+        "waiting": 0.15,
+        "critical": 0.1
+      },
+      "makespan": 19379.42,
+      "weighted_tardiness": 32291.193428850474,
+      "urgent_completion": 8193.155833333334
+    },
+    {
+      "name": "no_waiting",
+      "weights": {
+        "priority": 0.45,
+        "due": 0.3,
+        "waiting": 0.0,
+        "critical": 0.1
+      },
+      "makespan": 19348.22,
+      "weighted_tardiness": 32738.30945845583,
+      "urgent_completion": 8439.026666666667
+    },
+    {
+      "name": "no_critical",
+      "weights": {
+        "priority": 0.45,
+        "due": 0.3,
+        "waiting": 0.15,
+        "critical": 0.0
+      },
+      "makespan": 19348.22,
+      "weighted_tardiness": 32631.21427712092,
+      "urgent_completion": 8395.233333333334
+    },
+    {
+      "name": "priority_x0.5",
+      "weights": {
+        "priority": 0.225,
+        "due": 0.3,
+        "waiting": 0.15,
+        "critical": 0.1
+      },
+      "makespan": 19348.22,
+      "weighted_tardiness": 33178.883096156474,
+      "urgent_completion": 8496.833333333334
+    },
+    {
+      "name": "priority_x1.5",
+      "weights": {
+        "priority": 0.675,
+        "due": 0.3,
+        "waiting": 0.15,
+        "critical": 0.1
+      },
+      "makespan": 19373.18,
+      "weighted_tardiness": 31798.20196725183,
+      "urgent_completion": 8177.308333333333
+    },
+    {
+      "name": "due_x0.5",
+      "weights": {
+        "priority": 0.45,
+        "due": 0.15,
+        "waiting": 0.15,
+        "critical": 0.1
+      },
+      "makespan": 19354.46,
+      "weighted_tardiness": 32508.284251484834,
+      "urgent_completion": 8322.235833333334
+    },
+    {
+      "name": "due_x1.5",
+      "weights": {
+        "priority": 0.45,
+        "due": 0.44999999999999996,
+        "waiting": 0.15,
+        "critical": 0.1
+      },
+      "makespan": 19348.22,
+      "weighted_tardiness": 32793.09502292509,
+      "urgent_completion": 8442.858333333334
+    }
+  ]
+}
