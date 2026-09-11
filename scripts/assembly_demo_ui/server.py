@@ -432,7 +432,10 @@ def _poll_sim_ready() -> None:
         return
 
 
-def controller_command(quantity: int) -> list[str]:
+def controller_command(
+    quantity: int,
+    r7_r8_dual_entry: bool = True,
+) -> list[str]:
     """生成界面与手动演示共用的流水线命令。"""
     command = [
         sys.executable,
@@ -444,12 +447,17 @@ def controller_command(quantity: int) -> list[str]:
         "--plan",
         str(PIPELINE_PLAN),
     ]
+    if r7_r8_dual_entry:
+        command.append("--r7-r8-dual-entry")
     if quantity == 4:
         command.extend(["--black-job", "2", "--reduced-job", "2"])
     return command
 
 
-def start_controller(quantity: int = 1) -> tuple[bool, str]:
+def start_controller(
+    quantity: int = 1,
+    r7_r8_dual_entry: bool = True,
+) -> tuple[bool, str]:
     """运行三级流水线控制器，stdout 原样进入界面日志。"""
     global _ctrl_proc
     if not isinstance(quantity, int) or not 1 <= quantity <= 4:
@@ -467,7 +475,7 @@ def start_controller(quantity: int = 1) -> tuple[bool, str]:
     reset_report()
     try:
         _ctrl_proc = subprocess.Popen(
-            controller_command(quantity),
+            controller_command(quantity, r7_r8_dual_entry),
             cwd=str(REPO_ROOT),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -481,7 +489,12 @@ def start_controller(quantity: int = 1) -> tuple[bool, str]:
     set_sim_state("running")
     append_log(
         "ctrl",
-        f"装配控制器已启动 (PID {_ctrl_proc.pid}),生产数量:{quantity} 台",
+        f"装配控制器已启动 (PID {_ctrl_proc.pid}),生产数量:{quantity} 台,"
+        + (
+            "R7+R8 双臂入柜:开启"
+            if r7_r8_dual_entry
+            else "R7+R8 双臂入柜:关闭(稳定串行)"
+        ),
     )
     threading.Thread(
         target=pump_stream, args=(_ctrl_proc.stdout, "ctrl"), daemon=True
@@ -519,7 +532,7 @@ def _stop_live_simulation() -> bool:
         return False
 
 
-def _launch_and_start(quantity: int) -> None:
+def _launch_and_start(quantity: int, r7_r8_dual_entry: bool) -> None:
     """后台一键流程:确保 GUI 存活、场景停止,然后启动装配。"""
     import time
 
@@ -534,7 +547,7 @@ def _launch_and_start(quantity: int) -> None:
     while time.monotonic() < deadline:
         probed = _probe_sim_state(timeout=6.0)
         if probed == "ready":
-            ok, message = start_controller(quantity)
+            ok, message = start_controller(quantity, r7_r8_dual_entry)
             append_log("system", message)
             if not ok:
                 set_ctrl_state("error")
@@ -552,7 +565,10 @@ def _launch_and_start(quantity: int) -> None:
     set_ctrl_state("error")
 
 
-def run_assembly(quantity: int = 4) -> tuple[bool, str]:
+def run_assembly(
+    quantity: int = 4,
+    r7_r8_dual_entry: bool = True,
+) -> tuple[bool, str]:
     """接收界面的单次操作,异步完成仿真启动与装配运行。"""
     global _run_thread
     if not isinstance(quantity, int) or not 1 <= quantity <= 4:
@@ -566,16 +582,22 @@ def run_assembly(quantity: int = 4) -> tuple[bool, str]:
         append_log(
             "system",
             f"已接收一键装配任务:生产 {quantity} 台"
-            + ("(第 2 台为黑色简化工艺柜)" if quantity == 4 else ""),
+            + ("(第 2 台为黑色简化工艺柜)" if quantity == 4 else "")
+            + (
+                ";R7+R8 双臂入柜开启"
+                if r7_r8_dual_entry
+                else ";R7+R8 使用稳定串行模式"
+            ),
         )
         _run_thread = threading.Thread(
             target=_launch_and_start,
-            args=(quantity,),
+            args=(quantity, r7_r8_dual_entry),
             daemon=True,
             name="assembly-one-click",
         )
         _run_thread.start()
-    return True, f"装配任务已接收,将自动生产 {quantity} 台电控柜"
+    mode = "R7+R8 双臂入柜" if r7_r8_dual_entry else "稳定串行"
+    return True, f"装配任务已接收,将自动生产 {quantity} 台电控柜({mode})"
 
 
 def stop_controller() -> tuple[bool, str]:
@@ -933,6 +955,14 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         return payload if isinstance(payload, dict) else {}
 
+    @staticmethod
+    def _bool_value(value, default: bool) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         try:
@@ -1002,7 +1032,10 @@ class Handler(BaseHTTPRequestHandler):
                     quantity = int(body.get("quantity", 1))
                 except (TypeError, ValueError):
                     quantity = -1
-                ok, message = start_controller(quantity)
+                dual_entry = self._bool_value(
+                    body.get("r7_r8_dual_entry"), True
+                )
+                ok, message = start_controller(quantity, dual_entry)
                 self._ok({"ctrl_state": state_snapshot()["ctrl"]}, message) if ok else self._fail(message)
             elif path == "/api/run_assembly":
                 body = self._read_body()
@@ -1010,7 +1043,10 @@ class Handler(BaseHTTPRequestHandler):
                     quantity = int(body.get("quantity", 4))
                 except (TypeError, ValueError):
                     quantity = -1
-                ok, message = run_assembly(quantity)
+                dual_entry = self._bool_value(
+                    body.get("r7_r8_dual_entry"), True
+                )
+                ok, message = run_assembly(quantity, dual_entry)
                 self._ok({"state": state_snapshot()}, message) if ok else self._fail(message)
             elif path == "/api/stop_assembly":
                 ok, message = stop_controller()

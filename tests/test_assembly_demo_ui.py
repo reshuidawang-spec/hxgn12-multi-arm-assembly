@@ -23,6 +23,18 @@ class AssemblyDemoUiTests(unittest.TestCase):
         self.assertEqual(command[command.index("--speed") + 1], "3.0")
         self.assertEqual(command[command.index("--black-job") + 1], "2")
         self.assertEqual(command[command.index("--reduced-job") + 1], "2")
+        self.assertIn("--r7-r8-dual-entry", command)
+
+    def test_web_controller_can_fall_back_to_stable_serial_mode(self):
+        command = UI.controller_command(4, r7_r8_dual_entry=False)
+        self.assertNotIn("--r7-r8-dual-entry", command)
+        self.assertFalse(UI.Handler._bool_value(False, True))
+        self.assertFalse(UI.Handler._bool_value("false", True))
+        self.assertTrue(UI.Handler._bool_value(None, True))
+
+        page = UI.INDEX_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="dual-entry-toggle" type="checkbox" checked', page)
+        self.assertIn("r7_r8_dual_entry:dualEntry", page)
 
     def test_one_click_flow_starts_controller_after_scene_is_ready(self):
         with (
@@ -32,9 +44,9 @@ class AssemblyDemoUiTests(unittest.TestCase):
                 UI, "start_controller", return_value=(True, "started")
             ) as start_controller,
         ):
-            UI._launch_and_start(4)
+            UI._launch_and_start(4, True)
 
-        start_controller.assert_called_once_with(4)
+        start_controller.assert_called_once_with(4, True)
 
     def test_report_summarizes_process_arm_time_and_finished_cabinets(self):
         UI.reset_report()

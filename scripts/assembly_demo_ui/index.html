@@ -189,6 +189,8 @@ tbody tr:last-child td{border-bottom:none}
 .report-table td{vertical-align:middle}.report-table .metric-bar{min-width:120px;margin:0}
 .report-wait{padding:36px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
 .btnrow{display:flex;gap:10px;flex-wrap:wrap}
+.mode-switch{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+.mode-switch input{accent-color:var(--ok);width:15px;height:15px;margin:0}
 button.primary{
   background:linear-gradient(135deg,var(--accent),#6366f1);color:#06121f;
   border:none;border-radius:10px;padding:10px 22px;font-size:14.5px;font-weight:700;
@@ -225,6 +227,10 @@ footer{padding:10px 24px;font-size:11.5px;color:#4a5f80;border-top:1px solid var
     <span class="chip" id="chip-assign">任务分配 <b>—</b></span>
     <span class="chip" id="chip-sim">CoppeliaSim <b>未启动</b></span>
     <span class="chip" id="chip-ctrl">控制器 <b>待启动</b></span>
+    <label class="chip mode-switch" title="关闭后恢复 R7、R8 串行进入柜体">
+      <input id="dual-entry-toggle" type="checkbox" checked>
+      R7+R8 双臂入柜
+    </label>
   </div>
 </header>
 <main>
@@ -490,11 +496,12 @@ function statusCard(){
 }
 
 async function stepLaunch(card){
+  const dualEntry = $("#dual-entry-toggle").checked;
   card.classList.add("active");
   $("#panel").innerHTML = `
     <h2>运行装配任务<span class="tag">四柜混线一键启动</span></h2>
     <div class="status-cards">${statusCard()}</div>
-    <div class="banner ok show">✓ 任务已下发:CoppeliaSim 就绪后将自动开始装配,无需再点击其他按钮</div>
+    <div class="banner ok show">✓ 任务已下发:${dualEntry ? "R7+R8 双臂入柜已开启" : "R7+R8 稳定串行模式"} · CoppeliaSim 就绪后自动开始</div>
     <div class="btnrow"><button class="ghost" id="btn-stop">停止装配</button></div>
     <div class="console" id="logbox"><span class="l empty">正在发起启动请求 …</span></div>`;
   startLogPolling();
@@ -506,7 +513,10 @@ async function stepLaunch(card){
     }catch(e){ toast("停止失败: " + e.message); }
   });
   try{
-    const result = await api("/api/run_assembly", {method:"POST", body:{quantity:4}});
+    const result = await api("/api/run_assembly", {
+      method:"POST",
+      body:{quantity:4, r7_r8_dual_entry:dualEntry}
+    });
     toast(result.message);
   }catch(e){ toast("装配启动失败: " + e.message); updateSimState(); }
   finally{ card.classList.remove("active"); }
