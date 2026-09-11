@@ -35,6 +35,9 @@ class AssemblyDemoUiTests(unittest.TestCase):
         page = UI.INDEX_HTML.read_text(encoding="utf-8")
         self.assertIn('id="dual-entry-toggle" type="checkbox" checked', page)
         self.assertIn("r7_r8_dual_entry:dualEntry", page)
+        self.assertIn(
+            'id === "R2" ? [a.position[0], -0.10] : a.position', page
+        )
 
     def test_one_click_flow_starts_controller_after_scene_is_ready(self):
         with (

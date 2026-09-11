@@ -426,7 +426,9 @@ function cellMap(arms){
     `<rect x="${px(-4.35)}" y="${py(0.37)}" width="${px(1.25)-px(-4.35)}" height="${py(0.13)-py(0.37)}" fill="#152238" stroke="#2b4363"/>
      <text x="${px(-4.0)}" y="${py(0.44)}" fill="#4f6b93" font-size="10">索引托盘输送线</text>`);
   Object.entries(arms).forEach(([id, a]) => {
-    const [x,y] = a.position;
+    // R2 的真实底座位于工位框下沿之外；示意图把节点向上收进工位 1，
+    // 避免与下方工位标题重叠，机械臂配置中的真实坐标保持不变。
+    const [x,y] = id === "R2" ? [a.position[0], -0.10] : a.position;
     shapes.push(
       `<circle cx="${px(x)}" cy="${py(y)}" r="11" fill="#0c2c42" stroke="#38bdf8" stroke-width="1.6"/>
        <text x="${px(x)}" y="${py(y)+4}" text-anchor="middle" fill="#7dd3fc" font-size="11" font-weight="700">${id}</text>
